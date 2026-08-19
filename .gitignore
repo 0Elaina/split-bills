@@ -1,0 +1,26 @@
+# Personal development workflow
+/AGENTS.md
+/plans/
+/docs/00-documentation-guide.md
+/.codex/
+/.agents/
+
+# Local editor settings
+**/.vscode/
+**/.idea/
+*.code-workspace
+.DS_Store
+
+# Backend runtime and build output
+/backend/data/
+/backend/target/
+
+# Frontend dependencies and build output
+/frontend/node_modules/
+/frontend/dist/
+/frontend/dist-ssr/
+/frontend/coverage/
+
+# Local logs and overrides
+*.log
+*.local
