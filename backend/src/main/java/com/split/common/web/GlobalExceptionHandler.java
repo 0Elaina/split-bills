@@ -5,6 +5,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.split.common.exception.BadRequestException;
 import com.split.common.exception.NotFoundException;
@@ -72,6 +73,17 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
         log.warn("参数校验失败: {}", message);
         return Result.error(ApiErrorCode.VALIDATION_ERROR, message);
+    }
+
+    /**
+     * 处理静态资源或路径未找到异常 (Spring Boot 3.2+ 特性)
+     * 避免将其当作系统内部错误打印冗长堆栈
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result<Void> handleNoResourceFound(NoResourceFoundException e) {
+        log.warn("接口或资源不存在: {}", e.getMessage());
+        return Result.error(ApiErrorCode.LEDGER_NOT_FOUND, "请求的接口或资源不存在");
     }
 
     /**
