@@ -7,11 +7,13 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 账本实体类，映射数据库 ledgers 表
  */
 @Data
+@NoArgsConstructor
 @TableName("ledgers")
 public class Ledger {
     /**
@@ -34,4 +36,11 @@ public class Ledger {
      * 更新时间
      */
     private LocalDateTime updatedAt;
+
+    public Ledger(String name) {
+        LocalDateTime now = LocalDateTime.now();
+        this.name = name;
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
 }

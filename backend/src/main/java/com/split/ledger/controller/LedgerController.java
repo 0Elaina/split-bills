@@ -1,12 +1,16 @@
 package com.split.ledger.controller;
 
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.split.common.web.PageVO;
 import com.split.common.web.Result;
+import com.split.ledger.dto.LedgerSaveDTO;
 import com.split.ledger.service.LedgerService;
 import com.split.ledger.vo.LedgerVO;
 
@@ -33,5 +37,18 @@ public class LedgerController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         return Result.success(ledgerService.getLedgers(page, size));
+    }
+
+    /**
+     * 创建新账本
+     *
+     * @param dto 前端传入的账本数据
+     * @return 包含新生成 ID 的账本信息
+     */
+    @PostMapping
+    public Result<LedgerVO> createLedger(
+        @RequestBody @Validated LedgerSaveDTO dto
+    ) {
+        return Result.success(ledgerService.createLedger(dto));
     }
 }

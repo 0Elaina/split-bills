@@ -1,6 +1,7 @@
 package com.split.ledger.service;
 
 import com.split.common.web.PageVO;
+import com.split.ledger.dto.LedgerSaveDTO;
 import com.split.ledger.vo.LedgerVO;
 
 /**
@@ -15,5 +16,13 @@ public interface LedgerService {
      * @return 包含 LedgerVO 的分页包装数据
      */
     PageVO<LedgerVO> getLedgers(int page, int size);
+
+    /**
+     * 创建新账本
+     * 
+     * @param dto 包含新建数据的请求体
+     * @return 带有生成 ID 的账本视图对象
+     */
+    LedgerVO createLedger(LedgerSaveDTO dto);
 
 }

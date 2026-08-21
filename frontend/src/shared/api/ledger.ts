@@ -21,6 +21,14 @@ export interface LedgerItem {
     updatedAt: string
 }
 
+
+/**
+ * 新建/更新账本的请求体
+ */
+export interface LedgerSaveDTO {
+    name: string
+}
+
 /**
  * 获取账本列表 (分页)
  * @param page 页码，从 1 开始，默认 1
@@ -37,6 +45,18 @@ export async function getLedgers(page: number = 1, size: number = 20) {
                 size
             }
         }
+    )
+    return response.data.data
+}
+
+/**
+ * 创建新账本
+ * @param data 表单数据
+ */
+export async function createLedger(data: LedgerSaveDTO) {
+    const response = await http.post<ApiResult<LedgerItem>>(
+        '/ledgers',
+        data
     )
     return response.data.data
 }

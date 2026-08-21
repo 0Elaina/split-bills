@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.split.common.web.PageVO;
+import com.split.ledger.dto.LedgerSaveDTO;
 import com.split.ledger.entity.Ledger;
 import com.split.ledger.mapper.LedgerMapper;
 import com.split.ledger.service.LedgerService;
@@ -36,11 +37,24 @@ public class LedgerServiceImpl implements LedgerService {
 
         // 3. 组装符合 API 契约的 PageVO
         return new PageVO<>(
-            voList,
-            pager.getCurrent(),
-            pager.getSize(),
-            pager.getTotal(),
-            pager.getPages()
-        );
+                voList,
+                pager.getCurrent(),
+                pager.getSize(),
+                pager.getTotal(),
+                pager.getPages());
     }
+
+    /**
+     * 创建新账本
+     * 
+     * @param dto 包含新建数据的请求体
+     * @return 带有生成 ID 的账本视图对象
+     */
+    @Override
+    public LedgerVO createLedger(LedgerSaveDTO dto) {
+        Ledger ledger = new Ledger(dto.getName());
+        ledgerMapper.insert(ledger);
+        return LedgerVO.fromEntity(ledger);
+    }
+
 }
