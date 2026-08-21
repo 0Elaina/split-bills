@@ -40,7 +40,9 @@ com.split/
 ├── ledger/
 ├── expense/
 ├── settlement/
-└── shared/
+└── common/
+    ├── web/
+    └── exception/
 ```
 
 ### 3.1 模块职责与数据归属
@@ -50,7 +52,7 @@ com.split/
 | `ledger` | 管理账本及其成员，校验账本和成员的有效性 | 账本、成员 | 账本和成员的只读查询契约 |
 | `expense` | 管理消费、付款人和参与关系，执行消费录入校验 | 消费及其参与关系 | 结算所需的消费只读快照 |
 | `settlement` | 汇总实付与承担金额，计算净余额和转账建议 | 不持久化业务数据 | 结算结果 |
-| `shared` | 全局异常转换及无业务含义的通用 Web 支持 | 无 | 通用基础能力 |
+| `common` | 全局异常、统一响应及无业务含义的基础支持 | 无 | 通用基础能力 |
 
 成员只能存在于某个账本中，因此属于 `ledger`，不单独建立成员模块。结算结果始终从当前成员和消费数据推导，不建立结算实体或结算仓储。
 
@@ -61,7 +63,8 @@ com.split/
 - `settlement` 设置 Controller、Service、DTO 和独立计算器，不设置 Mapper 或持久化实体。
 - 跨模块只传递 `contract` 中定义的稳定只读对象，不传递内部实体。
 - 常规数据访问优先使用 MyBatis-Plus Mapper，不为首版预建 XML Mapper。
-- `shared` 不得承载账本、消费或结算规则，也不得成为任意代码的默认存放位置。
+- `common` 不得承载账本、消费或结算规则，也不得成为任意代码的默认存放位置。
+- 统一响应和分页均位于 `common.web`，所有业务异常按 HTTP 状态码语义（如 `NotFoundException`、`BadRequestException`）集成于 `common.exception`。
 
 ### 3.3 依赖方向
 
