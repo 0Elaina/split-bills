@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { createLedger, getLedgers, type LedgerSaveDTO, type LedgerItem } from '@/shared/api/ledger';
-import { onMounted, ref } from 'vue';
-
+import { createLedger, getLedgers, type LedgerSaveDTO, type LedgerItem } from '@/shared/api/ledger'
+import { onMounted, ref } from 'vue'
 
 // 定义响应式状态
 const ledgers = ref<LedgerItem[]>([])
@@ -9,15 +8,14 @@ const loading = ref<boolean>(true)
 
 // 获取账本列表
 const fetchLedgers = async () => {
-    try {
-        loading.value = true
-        const data = await getLedgers()
-        ledgers.value = data.items
-    } catch (error) {
-
-    } finally {
-        loading.value = false
-    }
+  try {
+    loading.value = true
+    const data = await getLedgers()
+    ledgers.value = data.items
+  } catch (error) {
+  } finally {
+    loading.value = false
+  }
 }
 
 // 控制弹窗可见性
@@ -27,133 +25,226 @@ const submitting = ref<boolean>(false)
 
 // 表单绑定的数据源
 const formData = ref<LedgerSaveDTO>({
-    name: ''
+  name: '',
 })
 
 // 提交表单方法
 const onSubmit = async () => {
-    // 基本的安全兜底，防止纯空格被提交
-    if (!formData.value.name.trim()) return
+  // 基本的安全兜底，防止纯空格被提交
+  if (!formData.value.name.trim()) return
 
-    try {
-        submitting.value = true
-        // 调用 API 创建账本
-        await createLedger(formData.value)
+  try {
+    submitting.value = true
+    // 调用 API 创建账本
+    await createLedger(formData.value)
 
-        // 成功后更改状态
-        dialog.value = false
-        formData.value.name = ''
+    // 成功后更改状态
+    dialog.value = false
+    formData.value.name = ''
 
-        // 重新获取账本列表
-        await fetchLedgers()
-    } catch (error) {
-
-    } finally {
-        submitting.value = false
-    }
-
+    // 重新获取账本列表
+    await fetchLedgers()
+  } catch (error) {
+  } finally {
+    submitting.value = false
+  }
 }
 
-
 onMounted(() => {
-    fetchLedgers()
+  fetchLedgers()
 })
-
 </script>
 
 <template>
-    <!-- 顶部导航条 -->
-    <v-app-bar color="primary" elevation="2">
-        <v-app-bar-title>合租账单结算器</v-app-bar-title>
-    </v-app-bar>
+  <div
+    class="text-on-background min-h-screen flex flex-col font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container"
+  >
+    <!-- TopNavBar -->
+    <header class="bg-background dark:bg-background docked full-width top-0 z-50">
+      <div class="flex justify-between items-center px-lg py-md max-w-container-max mx-auto w-full">
+        <div
+          class="text-headline-md font-headline-md font-bold text-primary dark:text-primary-fixed"
+        >
+          Split Bills
+        </div>
+        <div class="flex items-center gap-sm">
+          <!-- Notifications -->
+          <button
+            aria-label="Notifications"
+            class="text-primary dark:text-primary-fixed hover:text-primary-container transition-colors duration-200 p-sm rounded-full hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0"
+              >notifications</span
+            >
+          </button>
+          <!-- Account -->
+          <button
+            aria-label="Account"
+            class="text-primary dark:text-primary-fixed hover:text-primary-container transition-colors duration-200 p-sm rounded-full hover:bg-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0"
+              >account_circle</span
+            >
+          </button>
+        </div>
+      </div>
+    </header>
 
-    <!-- 页面主体容器 -->
-    <v-main>
-        <v-container class="py-6">
-            <!-- 数据请求时的加载提示 -->
-            <div v-if="loading" class="text-center mt-10">
-                <v-progress-circular indeterminate color="primary" />
+    <!-- Main Content -->
+    <main class="flex-grow w-full max-w-container-max mx-auto px-lg py-xl">
+      <!-- 数据请求时的加载提示 -->
+      <div v-if="loading" class="text-center mt-10">
+        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+      </div>
+
+      <template v-else>
+        <!-- Header Section -->
+        <div
+          class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-xl gap-md"
+        >
+          <div>
+            <h1 class="font-headline-lg text-headline-lg text-on-surface mb-xs">我的账本</h1>
+            <p class="font-body-md text-body-md text-on-surface-variant">
+              Manage your shared ledgers.
+            </p>
+          </div>
+          <button
+            @click="dialog = true"
+            aria-label="New Ledger"
+            class="bg-primary-container text-on-primary font-label-lg text-label-lg px-md py-sm rounded-lg flex items-center gap-sm hover:bg-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 shadow-sm"
+          >
+            <span
+              class="material-symbols-outlined text-[20px]"
+              style="font-variation-settings: 'FILL' 0"
+              >add</span
+            >
+            新建账本
+          </button>
+        </div>
+
+        <!-- Ledgers Grid -->
+        <div
+          v-if="ledgers.length > 0"
+          class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter"
+        >
+          <div
+            v-for="item in ledgers"
+            :key="item.id"
+            @click="$router.push(`/ledgers/${item.id}`)"
+            class="card-surface rounded-xl p-md flex flex-col group cursor-pointer bg-white border border-[#E5E2D9] shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
+          >
+            <div class="flex justify-between items-start mb-md">
+              <div class="bg-surface-container p-sm rounded-lg text-primary flex-shrink-0">
+                <span
+                  class="material-symbols-outlined text-[28px]"
+                  style="font-variation-settings: 'FILL' 0"
+                  >account_balance_wallet</span
+                >
+              </div>
+              <button
+                aria-label="More options"
+                class="text-on-surface-variant hover:text-primary p-xs rounded-full hover:bg-surface-variant transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
+                @click.stop
+              >
+                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0"
+                  >more_vert</span
+                >
+              </button>
             </div>
-
-            <!-- 数据就绪后的容器 -->
-            <div v-else>
-                <!-- 动作栏 (左右两端对齐布局) -->
-                <v-row class="mb-6" align="center">
-                    <v-col>
-                        <h1 class="text-h4 font-weight-bold text-grey-darken-4 mb-1">我的账本</h1>
-                        <div class="text-body-1 text-grey-darken-1">Manage your shared ledgers.</div>
-                    </v-col>
-                    <v-col cols="auto">
-                        <v-btn color="primary" prepend-icon="mdi-plus" size="large" rounded="lg" elevation="2" @click="dialog = true">
-                            新建账本
-                        </v-btn>
-                    </v-col>
-                </v-row>
-
-                <!-- 账本卡片网格 -->
-                <v-row v-if="ledgers.length > 0">
-                    <!-- 响应式列：手机占12格(全宽)，平板占6格(半宽)，桌面占4格(三分之一宽) -->
-                    <v-col v-for="item in ledgers" :key="item.id" cols="12" sm="6" md="4">
-                        <v-card hover class="h-100 d-flex flex-column rounded-xl" elevation="2">
-                            <!-- 顶部：图标与更多按钮 -->
-                            <div class="d-flex justify-space-between align-start pa-5 pb-2">
-                                <v-avatar color="primary" variant="tonal" rounded="lg" size="52">
-                                    <v-icon size="28">mdi-wallet</v-icon>
-                                </v-avatar>
-                                <v-btn icon="mdi-dots-vertical" variant="text" color="grey-darken-1" size="small" @click.stop></v-btn>
-                            </div>
-                            
-                            <!-- 主体内容 -->
-                            <div class="px-5 pt-2 pb-4 flex-grow-1">
-                                <h3 class="text-h6 font-weight-bold text-grey-darken-4 text-truncate">{{ item.name }}</h3>
-                                <div class="text-body-2 text-grey mt-1">Shared ledger for expenses.</div>
-                            </div>
-                            
-                            <!-- 底部时间 -->
-                            <v-divider></v-divider>
-                            <div class="px-5 py-3 d-flex align-center text-caption text-grey-darken-1">
-                                <v-icon size="small" class="mr-1">mdi-update</v-icon>
-                                更新于 {{ new Date(item.updatedAt).toLocaleDateString() }}
-                            </div>
-                        </v-card>
-                    </v-col>
-                </v-row>
-
-                <!-- 空状态提示 -->
-                <v-row v-else>
-                    <v-col class="text-center text-grey mt-10">
-                        暂无账本，点击右上角新建一个吧！
-                    </v-col>
-                </v-row>
+            <div class="flex-grow">
+              <h3
+                class="font-headline-md text-headline-md text-on-surface mb-xs line-clamp-1 group-hover:text-primary transition-colors"
+              >
+                {{ item.name }}
+              </h3>
+              <p class="font-body-md text-body-md text-on-surface-variant line-clamp-2">
+                Shared ledger for expenses.
+              </p>
             </div>
+            <div
+              class="mt-md pt-sm border-t border-outline-variant flex items-center justify-between text-on-surface-variant font-label-sm text-label-sm"
+            >
+              <div class="flex items-center gap-xs">
+                <span
+                  class="material-symbols-outlined text-[16px]"
+                  style="font-variation-settings: 'FILL' 0"
+                  >update</span
+                >
+                <span>更新于 {{ new Date(item.updatedAt).toLocaleDateString() }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-            <!-- 新建账本弹窗 -->
-            <v-dialog v-model="dialog" max-width="500">
-                <v-card>
-                    <v-card-title class="pt-4 px-6 text-h6 font-weight-bold">
-                        新建账本
-                    </v-card-title>
-                    <v-card-text class="px-6 pb-2">
-                        <!-- 提交时加上 .prevent 修饰符，阻止表单默认的刷新页面行为 -->
-                        <v-form @submit.prevent="onSubmit">
-                            <v-text-field v-model="formData.name" label="账本名称" variant="outlined" color="primary"
-                                :rules="[
-                                    v => !!v || '账本名称不能为空',
-                                    v => v.length <= 50 || '最多不能超过50个字符'
-                                ]" placeholder="请输入账本名称" autofocus>
-                            </v-text-field>
-                        </v-form>
-                    </v-card-text>
+        <div v-else class="text-center text-on-surface-variant mt-10">
+          暂无账本，点击右上角新建一个吧！
+        </div>
+      </template>
 
-                    <v-card-actions class="px-6 pb-4">
-                        <v-spacer></v-spacer> <!-- 把按钮推到右边 -->
-                        <v-btn variant="text" @click="dialog = false">取消</v-btn>
-                        <v-btn color="primary" variant="flat" :loading="submitting" @click="onSubmit">
-                            确定创建
-                        </v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
-        </v-container>
-    </v-main>
+      <!-- 新建账本弹窗 (保留 Vuetify 交互) -->
+      <v-dialog v-model="dialog" max-width="500">
+        <v-card>
+          <v-card-title class="pt-4 px-6 text-h6 font-weight-bold"> 新建账本 </v-card-title>
+          <v-card-text class="px-6 pb-2">
+            <v-form @submit.prevent="onSubmit">
+              <v-text-field
+                v-model="formData.name"
+                label="账本名称"
+                variant="outlined"
+                color="primary"
+                :rules="[
+                  (v) => !!v || '账本名称不能为空',
+                  (v) => v.length <= 50 || '最多不能超过50个字符',
+                ]"
+                placeholder="请输入账本名称"
+                autofocus
+              >
+              </v-text-field>
+            </v-form>
+          </v-card-text>
+
+          <v-card-actions class="px-6 pb-4">
+            <v-spacer></v-spacer>
+            <v-btn variant="text" @click="dialog = false">取消</v-btn>
+            <v-btn color="primary" variant="flat" :loading="submitting" @click="onSubmit">
+              确定创建
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+    </main>
+
+    <!-- Footer -->
+    <footer
+      class="bg-surface-container-low dark:bg-inverse-surface w-full mt-xl border-t border-outline-variant z-10"
+    >
+      <div
+        class="flex flex-col md:flex-row justify-between items-center px-lg py-md max-w-container-max mx-auto gap-md"
+      >
+        <div class="font-headline-sm text-headline-sm text-primary">Split Bills</div>
+        <div
+          class="font-body-md text-body-md text-secondary dark:text-secondary-fixed text-center md:text-left"
+        >
+          © 2024 Split Bills. Precision in every yen.
+        </div>
+        <div class="flex items-center gap-md font-label-sm text-label-sm">
+          <a
+            class="text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200"
+            href="#"
+            >Privacy Policy</a
+          >
+          <a
+            class="text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200"
+            href="#"
+            >Terms of Service</a
+          >
+          <a
+            class="text-on-surface-variant hover:text-primary dark:hover:text-primary-fixed transition-colors duration-200"
+            href="#"
+            >Help Center</a
+          >
+        </div>
+      </div>
+    </footer>
+  </div>
 </template>

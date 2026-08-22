@@ -1,52 +1,48 @@
-import { type ApiResult, http } from "./http"
+import { type ApiResult, http } from './http'
 
 /**
  * 分页基础响应结构
  */
 export interface PageData<T> {
-    items: T[]
-    page: number
-    size: number
-    totalElements: number
-    totalPages: number
+  items: T[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
 }
 
 /**
  * 账本明细数据结构
  */
 export interface LedgerItem {
-    id: string
-    name: string
-    createdAt: string
-    updatedAt: string
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
 }
-
 
 /**
  * 新建/更新账本的请求体
  */
 export interface LedgerSaveDTO {
-    name: string
+  name: string
 }
 
 /**
  * 获取账本列表 (分页)
  * @param page 页码，从 1 开始，默认 1
  * @param size 每页数量，默认 20
- * 
+ *
  * @returns 分页数据结构
  */
 export async function getLedgers(page: number = 1, size: number = 20) {
-    const response = await http.get<ApiResult<PageData<LedgerItem>>>(
-        '/ledgers',
-        {
-            params: {
-                page,
-                size
-            }
-        }
-    )
-    return response.data.data
+  const response = await http.get<ApiResult<PageData<LedgerItem>>>('/ledgers', {
+    params: {
+      page,
+      size,
+    },
+  })
+  return response.data.data
 }
 
 /**
@@ -54,9 +50,33 @@ export async function getLedgers(page: number = 1, size: number = 20) {
  * @param data 表单数据
  */
 export async function createLedger(data: LedgerSaveDTO) {
-    const response = await http.post<ApiResult<LedgerItem>>(
-        '/ledgers',
-        data
-    )
-    return response.data.data
+  const response = await http.post<ApiResult<LedgerItem>>('/ledgers', data)
+  return response.data.data
+}
+
+/**
+ * 获取单个账本详情
+ * @param id 账本 ID
+ */
+export async function getLedger(id: string) {
+  const response = await http.get<ApiResult<LedgerItem>>(`/ledgers/${id}`)
+  return response.data.data
+}
+
+/**
+ * 修改账本信息
+ * @param id 账本 ID
+ * @param data 更新的数据
+ */
+export async function updateLedger(id: string, data: LedgerSaveDTO) {
+  const response = await http.patch<ApiResult<LedgerItem>>(`/ledgers/${id}`, data)
+  return response.data.data
+}
+
+/**
+ * 删除账本
+ * @param id 账本 ID
+ */
+export async function deleteLedger(id: string) {
+  await http.delete<ApiResult<void>>(`/ledgers/${id}`)
 }
