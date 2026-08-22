@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getLedger, updateLedger, deleteLedger, type LedgerItem } from '@/shared/api/ledger'
+import { getMembers, createMember, type MemberVO, type MemberSaveDTO } from '@/shared/api/member'
 
 const route = useRoute()
 const router = useRouter()
@@ -9,6 +10,23 @@ const ledgerId = route.params.id as string
 
 const ledger = ref<LedgerItem | null>(null)
 const loading = ref(true)
+
+// 成员状态
+const members = ref<MemberVO[]>([])
+const memberDialog = ref(false)
+const memberSubmitting = ref(false)
+const memberFormData = ref<MemberSaveDTO>({ name: '' })
+
+// 颜色映射池 (应对设计原型的甲乙丙颜色分配)
+const colorClasses = [
+  'bg-primary text-on-primary',
+  'bg-secondary text-on-secondary',
+  'bg-tertiary text-on-tertiary'
+]
+
+const getMemberColorClass = (index: number) => {
+  return colorClasses[index % colorClasses.length]
+}
 
 // 修改名称弹窗状态
 const editDialog = ref(false)
@@ -23,12 +41,36 @@ const deleting = ref(false)
 const fetchDetail = async () => {
   try {
     loading.value = true
-    ledger.value = await getLedger(ledgerId)
+    const [ledgerData, membersData] = await Promise.all([
+      getLedger(ledgerId),
+      getMembers(ledgerId)
+    ])
+    ledger.value = ledgerData
+    members.value = membersData
   } catch (error) {
     // 异常由全局拦截器处理
     router.replace('/') // 找不到则退回首页
   } finally {
     loading.value = false
+  }
+}
+
+// 刷新成员
+const refreshMembers = async () => {
+  members.value = await getMembers(ledgerId)
+}
+
+// 提交新增成员
+const onSubmitMember = async () => {
+  if (!memberFormData.value.name.trim()) return
+  try {
+    memberSubmitting.value = true
+    await createMember(ledgerId, memberFormData.value)
+    memberDialog.value = false
+    memberFormData.value.name = ''
+    await refreshMembers()
+  } finally {
+    memberSubmitting.value = false
   }
 }
 
@@ -142,7 +184,7 @@ onMounted(() => {
               class="bg-surface-container-high text-on-surface font-label-sm text-label-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-outline-variant"
             >
               <span class="material-symbols-outlined text-[16px]">group</span>
-              0 位成员
+              {{ members.length }} 位成员
             </div>
             <div
               class="bg-surface-container-high text-on-surface font-label-sm text-label-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-outline-variant"
@@ -173,9 +215,26 @@ onMounted(() => {
             <div class="flex flex-col gap-sm">
               <h2 class="font-headline-md text-headline-md text-on-surface">参与成员</h2>
               <div
-                class="bg-white border border-[#E5E2D9] shadow-sm rounded-xl p-md flex flex-wrap gap-4 items-center min-h-[100px] justify-center text-on-surface-variant"
+                class="bg-white border border-[#E5E2D9] shadow-sm rounded-xl p-md flex flex-wrap gap-4 items-center min-h-[100px]"
               >
-                工作台占位区域：暂无成员
+                <!-- 渲染已有成员 -->
+                <div v-for="(member, index) in members" :key="member.id" class="flex flex-col items-center gap-1">
+                  <div
+                    :class="getMemberColorClass(index)"
+                    class="w-12 h-12 rounded-full flex items-center justify-center font-headline-md text-headline-md font-bold shadow-sm"
+                  >
+                    {{ member.name.substring(0, 1) }}
+                  </div>
+                </div>
+
+                <!-- 添加按钮 -->
+                <button
+                  @click="memberDialog = true"
+                  class="w-12 h-12 rounded-full border-2 border-dashed border-outline-variant text-on-surface-variant flex items-center justify-center hover:bg-surface-container hover:text-primary transition-colors flex-shrink-0"
+                  title="添加成员"
+                >
+                  <span class="material-symbols-outlined">add</span>
+                </button>
               </div>
             </div>
 
@@ -280,6 +339,32 @@ onMounted(() => {
           <v-btn variant="text" @click="deleteDialog = false">取消</v-btn>
           <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete"
             >确认删除</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 添加成员弹窗 -->
+    <v-dialog v-model="memberDialog" max-width="500">
+      <v-card>
+        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold">添加成员</v-card-title>
+        <v-card-text class="px-6 pb-2">
+          <v-form @submit.prevent="onSubmitMember">
+            <v-text-field
+              v-model="memberFormData.name"
+              label="成员昵称"
+              variant="outlined"
+              color="primary"
+              :rules="[(v) => !!v || '不能为空', (v) => v.length <= 10 || '不能超过10个字符']"
+              autofocus
+            ></v-text-field>
+          </v-form>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="memberDialog = false">取消</v-btn>
+          <v-btn color="primary" variant="flat" :loading="memberSubmitting" @click="onSubmitMember"
+            >确定</v-btn
           >
         </v-card-actions>
       </v-card>
