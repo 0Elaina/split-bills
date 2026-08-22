@@ -10,7 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@TableName("member")
+@TableName("members")
 @NoArgsConstructor
 public class Member {
     @TableId(type = IdType.AUTO)
