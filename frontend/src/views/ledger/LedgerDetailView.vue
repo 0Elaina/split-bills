@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getLedger, updateLedger, deleteLedger, type LedgerItem } from '@/shared/api/ledger'
-import { getMembers, createMember, type MemberVO, type MemberSaveDTO } from '@/shared/api/member'
+import { getMembers, createMember, updateMember, deleteMember, type MemberVO, type MemberSaveDTO } from '@/shared/api/member'
 
 const route = useRoute()
 const router = useRouter()
@@ -71,6 +71,52 @@ const onSubmitMember = async () => {
     await refreshMembers()
   } finally {
     memberSubmitting.value = false
+  }
+}
+
+// 修改成员状态与逻辑
+const editMemberDialog = ref(false)
+const memberEditing = ref<MemberVO | null>(null)
+const memberEditName = ref('')
+const memberEditSubmitting = ref(false)
+
+const openEditMember = (member: MemberVO) => {
+  memberEditing.value = member
+  memberEditName.value = member.name
+  editMemberDialog.value = true
+}
+
+const onUpdateMember = async () => {
+  if (!memberEditName.value.trim() || !memberEditing.value) return
+  try {
+    memberEditSubmitting.value = true
+    await updateMember(ledgerId, memberEditing.value.id, { name: memberEditName.value })
+    editMemberDialog.value = false
+    await refreshMembers()
+  } finally {
+    memberEditSubmitting.value = false
+  }
+}
+
+// 删除成员状态与逻辑
+const deleteMemberDialog = ref(false)
+const memberDeleting = ref<MemberVO | null>(null)
+const memberDeleteSubmitting = ref(false)
+
+const openDeleteMember = (member: MemberVO) => {
+  memberDeleting.value = member
+  deleteMemberDialog.value = true
+}
+
+const confirmDeleteMember = async () => {
+  if (!memberDeleting.value) return
+  try {
+    memberDeleteSubmitting.value = true
+    await deleteMember(ledgerId, memberDeleting.value.id)
+    deleteMemberDialog.value = false
+    await refreshMembers()
+  } finally {
+    memberDeleteSubmitting.value = false
   }
 }
 
@@ -219,12 +265,22 @@ onMounted(() => {
               >
                 <!-- 渲染已有成员 -->
                 <div v-for="(member, index) in members" :key="member.id" class="flex flex-col items-center gap-1">
-                  <div
-                    :class="getMemberColorClass(index)"
-                    class="w-12 h-12 rounded-full flex items-center justify-center font-headline-md text-headline-md font-bold shadow-sm"
-                  >
-                    {{ member.name.substring(0, 1) }}
-                  </div>
+                  <v-menu location="bottom center">
+                    <template v-slot:activator="{ props }">
+                      <div
+                        v-bind="props"
+                        :class="getMemberColorClass(index)"
+                        class="w-12 h-12 rounded-full flex items-center justify-center font-headline-md text-headline-md font-bold shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                        :title="member.name"
+                      >
+                        {{ member.name.substring(0, 1) }}
+                      </div>
+                    </template>
+                    <v-list>
+                      <v-list-item prepend-icon="mdi-pencil" title="修改成员" @click="openEditMember(member)"></v-list-item>
+                      <v-list-item prepend-icon="mdi-delete" title="删除成员" class="text-error" @click="openDeleteMember(member)"></v-list-item>
+                    </v-list>
+                  </v-menu>
                 </div>
 
                 <!-- 添加按钮 -->
@@ -365,6 +421,54 @@ onMounted(() => {
           <v-btn variant="text" @click="memberDialog = false">取消</v-btn>
           <v-btn color="primary" variant="flat" :loading="memberSubmitting" @click="onSubmitMember"
             >确定</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 修改成员弹窗 -->
+    <v-dialog v-model="editMemberDialog" max-width="500">
+      <v-card>
+        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold">修改成员名称</v-card-title>
+        <v-card-text class="px-6 pb-2">
+          <v-form @submit.prevent="onUpdateMember">
+            <v-text-field
+              v-model="memberEditName"
+              label="成员昵称"
+              variant="outlined"
+              color="primary"
+              :rules="[(v) => !!v || '不能为空', (v) => v.length <= 10 || '不能超过10个字符']"
+              autofocus
+            ></v-text-field>
+          </v-form>
+        </v-card-text>
+        <v-card-actions class="px-6 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="editMemberDialog = false">取消</v-btn>
+          <v-btn color="primary" variant="flat" :loading="memberEditSubmitting" @click="onUpdateMember"
+            >保存</v-btn
+          >
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- 删除成员确认弹窗 -->
+    <v-dialog v-model="deleteMemberDialog" max-width="400">
+      <v-card>
+        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold text-error">
+          <v-icon color="error" class="mr-2">mdi-alert</v-icon>删除成员
+        </v-card-title>
+        <v-card-text class="px-6 py-4 text-body-1">
+          确定要删除成员 <strong>{{ memberDeleting?.name }}</strong> 吗？<br />
+          <span class="text-caption text-grey"
+            >注意：如果该成员已参与任何账单，将无法被删除。</span
+          >
+        </v-card-text>
+        <v-card-actions class="px-6 pb-4">
+          <v-spacer></v-spacer>
+          <v-btn variant="text" @click="deleteMemberDialog = false">取消</v-btn>
+          <v-btn color="error" variant="flat" :loading="memberDeleteSubmitting" @click="confirmDeleteMember"
+            >确认删除</v-btn
           >
         </v-card-actions>
       </v-card>

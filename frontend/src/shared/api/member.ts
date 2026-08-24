@@ -26,3 +26,18 @@ export const createMember = async (ledgerId: string, dto: MemberSaveDTO): Promis
   const response = await http.post<ApiResult<string>>(`/ledgers/${ledgerId}/members`, dto)
   return response.data.data
 }
+
+/**
+ * 修改成员名称
+ */
+export const updateMember = async (ledgerId: string, memberId: string, dto: MemberSaveDTO): Promise<MemberVO> => {
+  const response = await http.patch<ApiResult<MemberVO>>(`/ledgers/${ledgerId}/members/${memberId}`, dto)
+  return response.data.data
+}
+
+/**
+ * 删除成员
+ */
+export const deleteMember = async (ledgerId: string, memberId: string): Promise<void> => {
+  await http.delete<ApiResult<void>>(`/ledgers/${ledgerId}/members/${memberId}`)
+}
