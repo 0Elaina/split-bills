@@ -3,7 +3,9 @@ package com.split.member.controller;
 import java.util.List;
 
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,5 +50,36 @@ public class MemberController {
             @RequestBody @Validated MemberSaveDTO dto) {
         return Result.success(
                 String.valueOf(memberService.createMember(ledgerId, dto)));
+    }
+
+    /**
+     * 修改成员名称
+     *
+     * @param ledgerId 账本 ID
+     * @param memberId 成员 ID
+     * @param dto      包含新名称的请求体（受 @Validated 保护）
+     * @return 修改后的成员信息
+     */
+    @PatchMapping("/{memberId}")
+    public Result<MemberVO> updateMember(
+            @PathVariable("ledgerId") Long ledgerId,
+            @PathVariable("memberId") Long memberId,
+            @RequestBody @Validated MemberSaveDTO dto) {
+        return Result.success(memberService.updateMember(ledgerId, memberId, dto));
+    }
+
+    /**
+     * 删除成员
+     *
+     * @param ledgerId 账本 ID
+     * @param memberId 成员 ID
+     * @return 空的成功响应
+     */
+    @DeleteMapping("/{memberId}")
+    public Result<Void> deleteMember(
+            @PathVariable("ledgerId") Long ledgerId,
+            @PathVariable("memberId") Long memberId) {
+        memberService.deleteMember(ledgerId, memberId);
+        return Result.success();
     }
 }

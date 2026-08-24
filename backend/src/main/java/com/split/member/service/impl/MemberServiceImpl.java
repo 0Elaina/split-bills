@@ -2,7 +2,9 @@ package com.split.member.service.impl;
 
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.split.common.exception.BadRequestException;
@@ -73,7 +75,7 @@ public class MemberServiceImpl implements MemberService {
         LambdaQueryWrapper<Member> existQuery = new LambdaQueryWrapper<>();
         existQuery.eq(Member::getLedgerId, ledgerId)
                 .eq(Member::getName, dto.getName());
-        
+
         if (memberMapper.selectCount(existQuery) > 0) {
             throw new ConflictException(ApiErrorCode.MEMBER_NAME_CONFLICT, "成员名称已存在");
         }
@@ -83,5 +85,73 @@ public class MemberServiceImpl implements MemberService {
         memberMapper.insert(member);
 
         return member.getId();
+    }
+
+    /**
+     * 修改成员姓名
+     *
+     * @param ledgerId 账本主键
+     * @param memberId 成员主键
+     * @param dto      包含新名称的数据
+     * @return 修改后的成员视图对象
+     */
+    @Override
+    public MemberVO updateMember(Long ledgerId, Long memberId, MemberSaveDTO dto) {
+        if (ledgerId == null || memberId == null) {
+            throw new BadRequestException(ApiErrorCode.VALIDATION_ERROR, "账本 ID 或成员 ID 不能为空");
+        }
+
+        // 确认该成员存在，且它真的是这个账本的（防止前端伪造路由越权）
+        Member member = memberMapper.selectById(memberId);
+        if (member == null || !member.getLedgerId().equals(ledgerId)) {
+            throw new NotFoundException(ApiErrorCode.MEMBER_NOT_FOUND, "成员不存在或不属于该账本");
+        }
+
+        if (dto == null || member.getName().equals(dto.getName())) {
+            return MemberVO.fromEntity(member);
+        }
+
+        // 查重逻辑：同一个账本下，有没有其他人叫这个新名字？
+        LambdaQueryWrapper<Member> existQuery = new LambdaQueryWrapper<>();
+        existQuery.eq(Member::getLedgerId, ledgerId)
+                .eq(Member::getName, dto.getName())
+                .ne(Member::getId, memberId);
+
+        if (memberMapper.selectCount(existQuery) > 0) {
+            throw new ConflictException(ApiErrorCode.MEMBER_NAME_CONFLICT, "该账本下已存在同名成员");
+        }
+
+        // 更新并保存
+        member.setName(dto.getName());
+        memberMapper.updateById(member);
+
+        return MemberVO.fromEntity(member);
+    }
+
+    /**
+     * 删除成员
+     *
+     * @param ledgerId 账本主键
+     * @param memberId 成员主键
+     */
+    @Override
+    @Transactional
+    public void deleteMember(Long ledgerId, Long memberId) {
+        if (ledgerId == null || memberId == null) {
+            throw new BadRequestException(ApiErrorCode.VALIDATION_ERROR, "账本 ID 或成员 ID 不能为空");
+        }
+
+        // 确认该成员存在，且属于当前账本
+        Member member = memberMapper.selectById(memberId);
+        if (member == null || !member.getLedgerId().equals(ledgerId)) {
+            throw new NotFoundException(ApiErrorCode.MEMBER_NOT_FOUND, "成员不存在或不属于该账本");
+        }
+
+        // 尝试删除
+        try {
+            memberMapper.deleteById(memberId);
+        } catch (DataIntegrityViolationException e) {
+            throw new BadRequestException(ApiErrorCode.MEMBER_IN_USE, "该成员已有相关账单消费记录，无法删除");
+        }
     }
 }
