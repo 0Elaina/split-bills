@@ -94,6 +94,7 @@ public class ExpenseServiceImpl implements ExpenseService {
         List<ExpenseParticipant> participants = dto.getParticipantMemberIds().stream()
                 .map(memberId -> {
                     ExpenseParticipant ep = new ExpenseParticipant();
+                    ep.setLedgerId(ledgerId); // 修复：补充外键 ledger_id
                     ep.setExpenseId(expense.getId());
                     ep.setMemberId(memberId);
                     return ep;

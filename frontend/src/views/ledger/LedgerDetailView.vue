@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getLedger, updateLedger, deleteLedger, type LedgerItem } from '@/shared/api/ledger'
 import { getMembers, createMember, updateMember, deleteMember, type MemberVO, type MemberSaveDTO } from '@/shared/api/member'
-import { getExpenses, type ExpenseListItemVO } from '@/shared/api/expense'
+import { getExpenses, createExpense, type ExpenseListItemVO, type ExpenseSaveDTO } from '@/shared/api/expense'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +20,23 @@ const memberFormData = ref<MemberSaveDTO>({ name: '' })
 
 // 消费状态
 const expenses = ref<ExpenseListItemVO[]>([])
+const expenseDialog = ref(false)
+const expenseSubmitting = ref(false)
+const expenseForm = ref<any>(null)
+const expenseFormData = ref<ExpenseSaveDTO>({
+  title: '',
+  amount: '',
+  expenseDate: new Date().toISOString().substring(0, 10), // 默认今天
+  payerMemberId: '',
+  participantMemberIds: []
+})
+
+// 表单金额正则验证规则
+const amountRules = [
+  (v: string) => !!v || '金额不能为空',
+  (v: string) => /^[1-9]\d*(\.\d{1,2})?$|^0\.\d{1,2}$/.test(v) || '金额格式不正确，必须大于 0 且最多两位小数'
+]
+
 
 const totalExpenseAmount = computed(() => {
   return expenses.value.reduce((sum, item) => sum + parseFloat(item.amount), 0).toFixed(2)
@@ -87,6 +104,41 @@ const onSubmitMember = async () => {
     await refreshMembers()
   } finally {
     memberSubmitting.value = false
+  }
+}
+
+// 刷新消费列表
+const refreshExpenses = async () => {
+  const expensesData = await getExpenses(ledgerId, 1, 100)
+  expenses.value = expensesData.records || []
+}
+
+// 打开记一笔弹窗
+const openExpenseDialog = () => {
+  expenseFormData.value = {
+    title: '',
+    amount: '',
+    expenseDate: new Date().toISOString().substring(0, 10),
+    payerMemberId: '',
+    participantMemberIds: []
+  }
+  expenseDialog.value = true
+}
+
+// 提交记一笔
+const onSubmitExpense = async () => {
+  // 检查原生的 participantMemberIds 是否为空
+  if (expenseFormData.value.participantMemberIds.length === 0) {
+    return
+  }
+  
+  try {
+    expenseSubmitting.value = true
+    await createExpense(ledgerId, expenseFormData.value)
+    expenseDialog.value = false
+    await refreshExpenses()
+  } finally {
+    expenseSubmitting.value = false
   }
 }
 
@@ -226,6 +278,7 @@ onMounted(() => {
               </v-menu>
 
               <button
+                @click="openExpenseDialog"
                 class="bg-primary-container text-on-primary font-label-lg text-label-lg py-2 px-6 rounded-lg hover:bg-opacity-90 transition-all shadow-sm flex items-center gap-2"
               >
                 <span class="material-symbols-outlined fill">add</span>
@@ -526,6 +579,102 @@ onMounted(() => {
           >
         </v-card-actions>
       </v-card>
+    </v-dialog>
+    <!-- 记一笔消费弹窗 -->
+    <v-dialog v-model="expenseDialog" max-width="640" transition="dialog-bottom-transition">
+      <form @submit.prevent="onSubmitExpense">
+        <div class="bg-surface rounded-xl shadow-[0px_8px_24px_rgba(0,0,0,0.12)] flex flex-col border border-surface-variant overflow-hidden">
+          <!-- Header -->
+          <div class="px-md py-md border-b border-outline-variant flex items-center justify-between bg-surface">
+            <h2 class="font-headline-md text-headline-md text-on-surface">记一笔消费</h2>
+            <button type="button" @click="expenseDialog = false" class="text-on-surface-variant hover:text-on-surface transition-colors p-xs rounded-full hover:bg-surface-container-high focus:outline-none">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <!-- Body -->
+          <div class="p-md flex flex-col gap-md overflow-y-auto max-h-[70vh]">
+            <!-- 消费名称 -->
+            <div class="flex flex-col gap-xs">
+              <label class="font-label-lg text-label-lg text-on-surface">消费名称</label>
+              <input v-model="expenseFormData.title" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-sm text-on-surface font-body-md text-body-md focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors" placeholder="输入消费名称" type="text" required />
+            </div>
+            <!-- 金额 & 日期 Row -->
+            <div class="grid grid-cols-2 gap-md">
+              <!-- 金额 -->
+              <div class="flex flex-col gap-xs">
+                <label class="font-label-lg text-label-lg text-on-surface">金额</label>
+                <div class="relative flex items-center">
+                  <span class="absolute left-sm text-on-surface-variant font-body-md text-body-md">¥</span>
+                  <input v-model="expenseFormData.amount" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg pl-[32px] pr-sm py-sm text-on-surface font-body-md text-body-md focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors" placeholder="0.00" type="text" required pattern="^[1-9]\d*(\.\d{1,2})?$|^0\.\d{1,2}$" title="金额格式不正确，必须大于 0 且最多两位小数" />
+                </div>
+              </div>
+              <!-- 消费日期 -->
+              <div class="flex flex-col gap-xs">
+                <label class="font-label-lg text-label-lg text-on-surface">消费日期</label>
+                <div class="relative flex items-center">
+                  <input v-model="expenseFormData.expenseDate" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-sm text-on-surface font-body-md text-body-md focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors" type="date" required />
+                </div>
+              </div>
+            </div>
+            <!-- 付款人 -->
+            <div class="flex flex-col gap-xs mt-base">
+              <label class="font-label-lg text-label-lg text-on-surface">付款人</label>
+              <div class="relative">
+                <select v-model="expenseFormData.payerMemberId" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-sm text-on-surface font-body-md text-body-md appearance-none focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors pr-xl" required>
+                  <option value="" disabled>请选择付款人</option>
+                  <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-sm text-on-surface-variant">
+                  <span class="material-symbols-outlined">expand_more</span>
+                </div>
+              </div>
+            </div>
+            <!-- 参与人 -->
+            <div class="flex flex-col gap-xs mt-base">
+              <label class="font-label-lg text-label-lg text-on-surface">参与人</label>
+              <div class="flex flex-wrap gap-sm items-center">
+                <label v-for="m in members" :key="m.id" class="cursor-pointer">
+                  <input type="checkbox" :value="m.id" v-model="expenseFormData.participantMemberIds" class="hidden" />
+                  <div :class="[
+                    'flex items-center gap-xs rounded-full pl-xs pr-sm py-xs border transition-colors',
+                    expenseFormData.participantMemberIds.includes(m.id) 
+                      ? 'bg-primary-container text-on-primary border-primary-container hover:bg-surface-tint' 
+                      : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:border-primary'
+                  ]">
+                    <div :class="[
+                      'w-6 h-6 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold',
+                      expenseFormData.participantMemberIds.includes(m.id)
+                        ? 'bg-surface-container-lowest text-primary'
+                        : 'bg-surface-variant text-on-surface-variant'
+                    ]">{{ m.name.charAt(0) }}</div>
+                    <span class="font-label-sm text-label-sm">{{ m.name }}</span>
+                    <span v-if="expenseFormData.participantMemberIds.includes(m.id)" class="material-symbols-outlined text-[16px]">close</span>
+                    <span v-else class="material-symbols-outlined text-[16px]">add</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <!-- Note Text -->
+            <div class="mt-xs">
+              <p class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-xs">
+                <span class="material-symbols-outlined text-[16px]">info</span>
+                金额将由所选参与人平均分摊
+              </p>
+              <p v-if="expenseFormData.participantMemberIds.length === 0" class="text-error font-label-sm text-label-sm mt-1">请至少选择一位参与人</p>
+            </div>
+          </div>
+          <!-- Footer Actions -->
+          <div class="px-md py-md border-t border-outline-variant bg-surface flex justify-end gap-sm items-center">
+            <button type="button" @click="expenseDialog = false" class="px-md py-sm font-label-lg text-label-lg text-primary hover:bg-surface-container-highest rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-container">
+              取消
+            </button>
+            <button type="submit" :disabled="expenseSubmitting" class="px-md py-sm font-label-lg text-label-lg bg-primary-container text-on-primary rounded-lg hover:bg-surface-tint transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-1 focus:ring-offset-surface flex items-center gap-2">
+              <v-progress-circular v-if="expenseSubmitting" indeterminate size="16" width="2"></v-progress-circular>
+              保存消费
+            </button>
+          </div>
+        </div>
+      </form>
     </v-dialog>
   </div>
 </template>

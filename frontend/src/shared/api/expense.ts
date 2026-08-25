@@ -1,4 +1,4 @@
-import { http } from './http'
+import { http, type ApiResult } from './http'
 import type { MemberVO } from './member'
 
 export interface ExpenseListItemVO {
@@ -23,8 +23,25 @@ export interface ExpensePageResponse {
 /**
  * 分页获取账本下的消费明细
  */
-export function getExpenses(ledgerId: string, page = 1, size = 20) {
-    return http.get<ExpensePageResponse>(`/ledgers/${ledgerId}/expenses`, {
-        params: { current: page, size }
-    })
+export async function getExpenses(ledgerId: string, page = 1, size = 20) {
+  const response = await http.get<ApiResult<ExpensePageResponse>>(`/ledgers/${ledgerId}/expenses`, {
+    params: { current: page, size }
+  })
+  return response.data.data
+}
+
+export interface ExpenseSaveDTO {
+    title: string
+    amount: string
+    expenseDate: string
+    payerMemberId: string | number
+    participantMemberIds: (string | number)[]
+}
+
+/**
+ * 新增记一笔
+ */
+export async function createExpense(ledgerId: string, data: ExpenseSaveDTO) {
+  const response = await http.post<ApiResult<void>>(`/ledgers/${ledgerId}/expenses`, data)
+  return response.data.data
 }
