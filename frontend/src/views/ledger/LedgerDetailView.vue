@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useLedger } from './composables/useLedger'
 import { useMembers } from './composables/useMembers'
 import { useExpenses } from './composables/useExpenses'
+import { useSettlement } from './composables/useSettlement'
 
 import ExpenseFormDialog from './components/ExpenseFormDialog.vue'
 import MemberModals from './components/MemberModals.vue'
@@ -32,6 +33,8 @@ const {
   expenseDialog, expenseEditing, openExpenseDialog, editExpense, confirmDeleteExpense, onExpenseSuccess
 } = useExpenses(ledgerId)
 
+const { settlement, fetchSettlement } = useSettlement(ledgerId)
+
 // 颜色映射池
 const colorClasses = [
   'bg-primary text-on-primary',
@@ -43,6 +46,11 @@ const getMemberColorClass = (index: number) => {
   return colorClasses[index % colorClasses.length]
 }
 
+const getMemberColorById = (id: string) => {
+  const index = members.value.findIndex(m => String(m.id) === String(id))
+  return getMemberColorClass(index >= 0 ? index : 0)
+}
+
 const loading = ref(true)
 
 // 初始化获取数据
@@ -52,11 +60,21 @@ const fetchDetail = async () => {
     await Promise.all([
       fetchLedger(),
       fetchMembers(),
-      fetchExpenses()
+      fetchExpenses(),
+      fetchSettlement()
     ])
   } finally {
     loading.value = false
   }
+}
+
+const handleExpenseSuccess = async () => {
+  await onExpenseSuccess()
+  await fetchSettlement()
+}
+
+const handleMemberUpdateSuccess = async () => {
+  await fetchSettlement()
 }
 
 onMounted(() => {
@@ -263,10 +281,53 @@ onMounted(() => {
             <!-- Settlement Card -->
             <div class="flex flex-col gap-sm">
               <h2 class="font-headline-md text-headline-md text-on-surface">结算方案</h2>
-              <div
-                class="bg-white border border-[#E5E2D9] shadow-sm rounded-xl p-md flex flex-col gap-md min-h-[100px] items-center justify-center text-on-surface-variant"
-              >
-                工作台占位区域：暂无结算方案
+              <div class="surface-card rounded-xl p-md flex flex-col gap-md min-h-[200px]">
+                <template v-if="settlement && (settlement.balances.length > 0 || settlement.transfers.length > 0)">
+                  <!-- Net Balances -->
+                  <div class="flex flex-col gap-xs" v-if="settlement.balances.length > 0">
+                    <h3 class="font-label-lg text-label-lg text-on-surface-variant mb-2">个人净余额</h3>
+                    <div v-for="bal in settlement.balances" :key="bal.member.id" class="flex justify-between items-center py-1">
+                      <div class="flex items-center gap-2">
+                        <div :class="['w-6 h-6 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold shadow-sm', getMemberColorById(bal.member.id)]">
+                          {{ bal.member.name.substring(0, 1) }}
+                        </div>
+                        <span class="font-body-md text-body-md text-on-surface">{{ bal.member.name }}</span>
+                      </div>
+                      <span class="font-body-md text-body-md font-medium" :class="parseFloat(bal.netBalance) > 0 ? 'text-primary-container' : parseFloat(bal.netBalance) < 0 ? 'text-error' : 'text-on-surface-variant'">
+                        {{ parseFloat(bal.netBalance) > 0 ? '+' : '' }}{{ bal.netBalance === '0.00' ? '' : '¥' }}{{ bal.netBalance === '0.00' ? '已结清' : bal.netBalance }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="h-px bg-outline-variant w-full opacity-50" v-if="settlement.transfers.length > 0"></div>
+
+                  <!-- Settlement Suggestions -->
+                  <div class="flex flex-col gap-sm" v-if="settlement.transfers.length > 0">
+                    <h3 class="font-label-lg text-label-lg text-on-surface-variant mb-1">建议转账</h3>
+                    <div v-for="(t, idx) in settlement.transfers" :key="idx" class="bg-surface-container-low rounded-lg p-3 border border-outline-variant flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <div :class="['w-8 h-8 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold shadow-sm', getMemberColorById(t.fromMember.id)]">
+                          {{ t.fromMember.name.substring(0, 1) }}
+                        </div>
+                        <span class="material-symbols-outlined text-outline">arrow_forward</span>
+                        <div :class="['w-8 h-8 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold shadow-sm', getMemberColorById(t.toMember.id)]">
+                          {{ t.toMember.name.substring(0, 1) }}
+                        </div>
+                      </div>
+                      <span class="font-body-lg text-body-lg text-on-surface font-medium">¥{{ t.amount }}</span>
+                    </div>
+                  </div>
+                  
+                  <div v-if="settlement.transfers.length === 0 && settlement.balances.some(b => parseFloat(b.netBalance) !== 0)" class="flex items-center justify-center p-4">
+                    <span class="text-on-surface-variant text-label-md">无需转账</span>
+                  </div>
+                </template>
+                
+                <div v-else class="flex-grow flex flex-col items-center justify-center text-center p-6 text-on-surface-variant opacity-70">
+                  <span class="material-symbols-outlined text-4xl mb-2">account_balance</span>
+                  <p class="font-label-lg">暂无结算数据</p>
+                  <p class="text-label-sm mt-1">添加成员并记录消费后即可看到结算建议</p>
+                </div>
               </div>
             </div>
           </div>
@@ -323,17 +384,17 @@ onMounted(() => {
       v-model:add-dialog="memberDialog"
       v-model:add-form-data="memberFormData"
       :add-submitting="memberSubmitting"
-      @submit-add="onSubmitMember"
+      @submit-add="async () => { await onSubmitMember(); fetchSettlement(); }"
 
       v-model:edit-dialog="editMemberDialog"
       v-model:edit-name="memberEditName"
       :edit-submitting="memberEditSubmitting"
-      @submit-edit="onUpdateMember"
+      @submit-edit="async () => { await onUpdateMember(); fetchSettlement(); }"
 
       v-model:delete-dialog="deleteMemberDialog"
       :deleting-member="memberDeleting"
       :delete-submitting="memberDeleteSubmitting"
-      @submit-delete="confirmDeleteMember"
+      @submit-delete="async () => { await confirmDeleteMember(); fetchSettlement(); }"
     />
 
     <!-- 账本管理弹窗组件 -->
@@ -353,7 +414,7 @@ onMounted(() => {
       :ledger-id="ledgerId"
       :members="members"
       :editing-expense="expenseEditing"
-      @success="onExpenseSuccess"
+      @success="handleExpenseSuccess"
     />
   </div>
 </template>
