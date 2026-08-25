@@ -79,28 +79,104 @@ public class ExpenseServiceImpl implements ExpenseService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void createExpense(Long ledgerId, ExpenseSaveDTO dto) {
-        // 将 String 类型的金额转换成 分（Long）
-        BigDecimal amountDecimal = new BigDecimal(dto.getAmount());
-        long amountCents = amountDecimal.multiply(BigDecimal.valueOf(100)).longValue();
+        // 转换为 Expense 主表实体
+        Expense expense = convertToExpense(dto, ledgerId);
 
-        // 组装并保存主表 Expense
+        // 保存主表 Expense
+        expenseMapper.insert(expense);
+
+        // 保存关联表 ExpenseParticipant
+        saveParticipants(ledgerId, expense.getId(), dto.getParticipantMemberIds());
+    }
+
+    /**
+     * 删除消费及参与人关联
+     *
+     * @param ledgerId  账本 ID
+     * @param expenseId 消费 ID
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteExpense(Long ledgerId, Long expenseId) {
+        // 按 expenseId 删除所有参与人关联记录
+        deleteParticipants(ledgerId, expenseId);
+
+        // 删除主表消费记录
+        expenseMapper.delete(new LambdaQueryWrapper<Expense>()
+                .eq(Expense::getId, expenseId)
+                .eq(Expense::getLedgerId, ledgerId));
+    }
+
+    /**
+     * 修改消费（全量替换）
+     *
+     * @param ledgerId  账本 ID
+     * @param expenseId 消费 ID
+     * @param dto       更新参数（复用新增的 DTO）
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateExpense(Long ledgerId, Long expenseId, ExpenseSaveDTO dto) {
+        // 删除该消费原本的所有参与人
+        deleteParticipants(ledgerId, expenseId);
+
+        // 转换为 Expense 主表实体
+        Expense expense = convertToExpense(dto, ledgerId);
+        expense.setId(expenseId);
+
+        // 更新主表信息
+        expenseMapper.update(expense, new LambdaQueryWrapper<Expense>()
+                .eq(Expense::getId, expenseId)
+                .eq(Expense::getLedgerId, ledgerId));
+
+        // 保存关联表 ExpenseParticipant
+        saveParticipants(ledgerId, expenseId, dto.getParticipantMemberIds());
+    }
+
+    /**
+     * 防越权删除某笔消费的所有参与人关联记录
+     * 
+     * @param ledgerId  账本 ID
+     * @param expenseId 消费 ID
+     */
+    private void deleteParticipants(Long ledgerId, Long expenseId) {
+        participantMapper.delete(new LambdaQueryWrapper<ExpenseParticipant>()
+                .eq(ExpenseParticipant::getExpenseId, expenseId)
+                .eq(ExpenseParticipant::getLedgerId, ledgerId));
+    }
+
+    /**
+     * 批量保存参与人关联记录
+     * 
+     * @param ledgerId  账本 ID
+     * @param expenseId 消费 ID
+     * @param memberIds 参与人 ID 列表
+     */
+    private void saveParticipants(Long ledgerId, Long expenseId, List<Long> memberIds) {
+        List<ExpenseParticipant> participants = memberIds.stream()
+                .map(memberId -> new ExpenseParticipant(ledgerId, expenseId, memberId))
+                .collect(Collectors.toList());
+        participantMapper.insert(participants);
+    }
+
+    /**
+     * 将 DTO 转换为 Expense 主表实体，处理金额换算与账本归属
+     * 
+     * @param dto      请求参数
+     * @param ledgerId 账本 ID
+     * @return Expense 主表实体
+     */
+    private Expense convertToExpense(ExpenseSaveDTO dto, Long ledgerId) {
         Expense expense = new Expense();
         BeanUtils.copyProperties(dto, expense);
         expense.setLedgerId(ledgerId);
-        expense.setAmountCents(amountCents);
-        expenseMapper.insert(expense);
 
-        // 组装并批量保存关联表 ExpenseParticipant
-        List<ExpenseParticipant> participants = dto.getParticipantMemberIds().stream()
-                .map(memberId -> {
-                    ExpenseParticipant ep = new ExpenseParticipant();
-                    ep.setLedgerId(ledgerId); // 修复：补充外键 ledger_id
-                    ep.setExpenseId(expense.getId());
-                    ep.setMemberId(memberId);
-                    return ep;
-                })
-                .collect(Collectors.toList());
-        participantMapper.insert(participants);
+        // 转换金额为 分（Long）
+        BigDecimal amountDeciaml = new BigDecimal(dto.getAmount());
+        long amountCents = amountDeciaml.multiply(BigDecimal.valueOf(100)).longValue();
+        expense.setAmountCents(amountCents);
+
+        return expense;
     }
 
     /**

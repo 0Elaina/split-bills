@@ -2,6 +2,8 @@ package com.split.expense.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -10,6 +12,8 @@ import lombok.NoArgsConstructor;
  */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @TableName("expense_participants")
 public class ExpenseParticipant {
     private Long ledgerId;

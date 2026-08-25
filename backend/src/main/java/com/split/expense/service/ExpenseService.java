@@ -22,4 +22,21 @@ public interface ExpenseService {
      * @param dto      请求参数
      */
     void createExpense(Long ledgerId, ExpenseSaveDTO dto);
+
+    /**
+     * 删除消费及参与人关联
+     *
+     * @param ledgerId  账本 ID
+     * @param expenseId 消费 ID
+     */
+    void deleteExpense(Long ledgerId, Long expenseId);
+
+    /**
+     * 修改消费（全量替换）
+     *
+     * @param ledgerId  账本 ID
+     * @param expenseId 消费 ID
+     * @param dto       更新参数（复用新增的 DTO）
+     */
+    void updateExpense(Long ledgerId, Long expenseId, ExpenseSaveDTO dto);
 }

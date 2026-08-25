@@ -1,8 +1,10 @@
 package com.split.expense.controller;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -50,10 +52,39 @@ public class ExpenseController {
      */
     @PostMapping
     public Result<Void> createExpense(
-        @PathVariable Long ledgerId,
-        @Valid @RequestBody  ExpenseSaveDTO dto
-    ) {
+            @PathVariable Long ledgerId,
+            @Valid @RequestBody ExpenseSaveDTO dto) {
         expenseService.createExpense(ledgerId, dto);
+        return Result.success();
+    }
+
+    /**
+     * 删除消费明细
+     *
+     * @param ledgerId  账本主键
+     * @param expenseId 消费主键
+     */
+    @DeleteMapping("/{expenseId}")
+    public Result<Void> deleteExpense(
+            @PathVariable Long ledgerId,
+            @PathVariable Long expenseId) {
+        expenseService.deleteExpense(ledgerId, expenseId);
+        return Result.success();
+    }
+
+    /**
+     * 修改消费明细
+     *
+     * @param ledgerId  账本主键
+     * @param expenseId 消费主键
+     * @param dto       更新参数
+     */
+    @PutMapping("/{expenseId}")
+    public Result<Void> updateExpense(
+            @PathVariable Long ledgerId,
+            @PathVariable Long expenseId,
+            @Valid @RequestBody ExpenseSaveDTO dto) {
+        expenseService.updateExpense(ledgerId, expenseId, dto);
         return Result.success();
     }
 }
