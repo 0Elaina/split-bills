@@ -6,6 +6,9 @@ import { useMembers } from './composables/useMembers'
 import { useExpenses } from './composables/useExpenses'
 import { useSettlement } from './composables/useSettlement'
 
+import ExpenseList from './components/ExpenseList.vue'
+import MemberCard from './components/MemberCard.vue'
+import SettlementCard from './components/SettlementCard.vue'
 import ExpenseFormDialog from './components/ExpenseFormDialog.vue'
 import MemberModals from './components/MemberModals.vue'
 import LedgerModals from './components/LedgerModals.vue'
@@ -35,22 +38,6 @@ const {
 
 const { settlement, fetchSettlement } = useSettlement(ledgerId)
 
-// 颜色映射池
-const colorClasses = [
-  'bg-primary text-on-primary',
-  'bg-secondary text-on-secondary',
-  'bg-tertiary text-on-tertiary'
-]
-
-const getMemberColorClass = (index: number) => {
-  return colorClasses[index % colorClasses.length]
-}
-
-const getMemberColorById = (id: string) => {
-  const index = members.value.findIndex(m => String(m.id) === String(id))
-  return getMemberColorClass(index >= 0 ? index : 0)
-}
-
 const loading = ref(true)
 
 // 初始化获取数据
@@ -70,10 +57,6 @@ const fetchDetail = async () => {
 
 const handleExpenseSuccess = async () => {
   await onExpenseSuccess()
-  await fetchSettlement()
-}
-
-const handleMemberUpdateSuccess = async () => {
   await fetchSettlement()
 }
 
@@ -172,164 +155,28 @@ onMounted(() => {
         <div class="grid grid-cols-12 gap-gutter">
           <!-- Left Column (8): Expense List -->
           <div class="col-span-12 lg:col-span-8 flex flex-col gap-md">
-            <h2 class="font-headline-md text-headline-md text-on-surface mb-xs">消费明细</h2>
-            
-            <div v-if="expenses.length === 0"
-              class="surface-card rounded-xl p-sm flex flex-col min-h-[200px] items-center justify-center text-on-surface-variant"
-            >
-              暂无消费明细，点击“记一笔”开始记录
-            </div>
-
-            <div v-else class="surface-card rounded-xl p-sm flex flex-col">
-              <div
-                v-for="expense in expenses"
-                :key="expense.id"
-                class="expense-divider p-sm flex items-center justify-between hover:bg-surface-container-low transition-colors rounded-lg cursor-pointer"
-              >
-                <div class="flex items-center gap-md">
-                  <div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
-                    <span class="material-symbols-outlined">receipt_long</span>
-                  </div>
-                  <div class="flex flex-col">
-                    <span class="font-body-lg text-body-lg text-on-surface font-medium">{{ expense.title }}</span>
-                    <div class="flex items-center gap-2 mt-1">
-                      <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[14px]">calendar_today</span> {{ expense.expenseDate }}
-                      </span>
-                      <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
-                        <span class="material-symbols-outlined text-[14px]">person</span> {{ expense.payer?.name }} 支付
-                      </span>
-                    </div>
-                    <div class="flex items-center flex-wrap gap-1 mt-2">
-                      <span
-                        v-for="participant in expense.participants"
-                        :key="participant.id"
-                        class="bg-surface-container-highest text-on-surface-variant text-[10px] px-2 py-0.5 rounded"
-                      >
-                        {{ participant.name }}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div class="text-right flex items-center gap-sm">
-                  <span class="font-headline-md text-headline-md text-on-surface">¥{{ expense.amount }}</span>
-                  <v-menu location="bottom end">
-                    <template v-slot:activator="{ props }">
-                      <button v-bind="props" class="p-2 rounded-full hover:bg-surface-variant text-on-surface-variant transition-colors flex items-center justify-center" @click.stop>
-                        <span class="material-symbols-outlined">more_vert</span>
-                      </button>
-                    </template>
-                    <v-list class="bg-surface border border-outline-variant shadow-sm rounded-lg">
-                      <v-list-item @click="editExpense(expense)" class="hover:bg-surface-container-high transition-colors cursor-pointer">
-                        <template v-slot:prepend>
-                          <span class="material-symbols-outlined mr-2 text-[18px]">edit</span>
-                        </template>
-                        <v-list-item-title class="font-label-lg text-label-lg">编辑</v-list-item-title>
-                      </v-list-item>
-                      <v-list-item @click="confirmDeleteExpense(expense.id)" class="hover:bg-error-container text-error transition-colors cursor-pointer">
-                        <template v-slot:prepend>
-                          <span class="material-symbols-outlined mr-2 text-[18px]">delete</span>
-                        </template>
-                        <v-list-item-title class="font-label-lg text-label-lg">删除</v-list-item-title>
-                      </v-list-item>
-                    </v-list>
-                  </v-menu>
-                </div>
-              </div>
-            </div>
+            <ExpenseList
+              :expenses="expenses"
+              @edit="editExpense"
+              @delete="async (id) => { await confirmDeleteExpense(id); fetchSettlement(); }"
+            />
           </div>
 
           <!-- Right Column (4): Members & Settlements -->
           <div class="col-span-12 lg:col-span-4 flex flex-col gap-xl">
             <!-- Members Card -->
-            <div class="flex flex-col gap-sm">
-              <h2 class="font-headline-md text-headline-md text-on-surface">参与成员</h2>
-              <div
-                class="bg-white border border-[#E5E2D9] shadow-sm rounded-xl p-md flex flex-wrap gap-4 items-center min-h-[100px]"
-              >
-                <!-- 渲染已有成员 -->
-                <div v-for="(member, index) in members" :key="member.id" class="flex flex-col items-center gap-1">
-                  <v-menu location="bottom center">
-                    <template v-slot:activator="{ props }">
-                      <div
-                        v-bind="props"
-                        :class="getMemberColorClass(index)"
-                        class="w-12 h-12 rounded-full flex items-center justify-center font-headline-md text-headline-md font-bold shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
-                        :title="member.name"
-                      >
-                        {{ member.name.substring(0, 1) }}
-                      </div>
-                    </template>
-                    <v-list>
-                      <v-list-item prepend-icon="mdi-pencil" title="修改成员" @click="openEditMember(member)"></v-list-item>
-                      <v-list-item prepend-icon="mdi-delete" title="删除成员" class="text-error" @click="openDeleteMember(member)"></v-list-item>
-                    </v-list>
-                  </v-menu>
-                </div>
-
-                <!-- 添加按钮 -->
-                <button
-                  @click="memberDialog = true"
-                  class="w-12 h-12 rounded-full border-2 border-dashed border-outline-variant text-on-surface-variant flex items-center justify-center hover:bg-surface-container hover:text-primary transition-colors flex-shrink-0"
-                  title="添加成员"
-                >
-                  <span class="material-symbols-outlined">add</span>
-                </button>
-              </div>
-            </div>
+            <MemberCard
+              :members="members"
+              @add="memberDialog = true"
+              @edit="openEditMember"
+              @delete="openDeleteMember"
+            />
 
             <!-- Settlement Card -->
-            <div class="flex flex-col gap-sm">
-              <h2 class="font-headline-md text-headline-md text-on-surface">结算方案</h2>
-              <div class="surface-card rounded-xl p-md flex flex-col gap-md min-h-[200px]">
-                <template v-if="settlement && (settlement.balances.length > 0 || settlement.transfers.length > 0)">
-                  <!-- Net Balances -->
-                  <div class="flex flex-col gap-xs" v-if="settlement.balances.length > 0">
-                    <h3 class="font-label-lg text-label-lg text-on-surface-variant mb-2">个人净余额</h3>
-                    <div v-for="bal in settlement.balances" :key="bal.member.id" class="flex justify-between items-center py-1">
-                      <div class="flex items-center gap-2">
-                        <div :class="['w-6 h-6 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold shadow-sm', getMemberColorById(bal.member.id)]">
-                          {{ bal.member.name.substring(0, 1) }}
-                        </div>
-                        <span class="font-body-md text-body-md text-on-surface">{{ bal.member.name }}</span>
-                      </div>
-                      <span class="font-body-md text-body-md font-medium" :class="parseFloat(bal.netBalance) > 0 ? 'text-primary-container' : parseFloat(bal.netBalance) < 0 ? 'text-error' : 'text-on-surface-variant'">
-                        {{ parseFloat(bal.netBalance) > 0 ? '+' : '' }}{{ bal.netBalance === '0.00' ? '' : '¥' }}{{ bal.netBalance === '0.00' ? '已结清' : bal.netBalance }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div class="h-px bg-outline-variant w-full opacity-50" v-if="settlement.transfers.length > 0"></div>
-
-                  <!-- Settlement Suggestions -->
-                  <div class="flex flex-col gap-sm" v-if="settlement.transfers.length > 0">
-                    <h3 class="font-label-lg text-label-lg text-on-surface-variant mb-1">建议转账</h3>
-                    <div v-for="(t, idx) in settlement.transfers" :key="idx" class="bg-surface-container-low rounded-lg p-3 border border-outline-variant flex items-center justify-between">
-                      <div class="flex items-center gap-3">
-                        <div :class="['w-8 h-8 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold shadow-sm', getMemberColorById(t.fromMember.id)]">
-                          {{ t.fromMember.name.substring(0, 1) }}
-                        </div>
-                        <span class="material-symbols-outlined text-outline">arrow_forward</span>
-                        <div :class="['w-8 h-8 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold shadow-sm', getMemberColorById(t.toMember.id)]">
-                          {{ t.toMember.name.substring(0, 1) }}
-                        </div>
-                      </div>
-                      <span class="font-body-lg text-body-lg text-on-surface font-medium">¥{{ t.amount }}</span>
-                    </div>
-                  </div>
-                  
-                  <div v-if="settlement.transfers.length === 0 && settlement.balances.some(b => parseFloat(b.netBalance) !== 0)" class="flex items-center justify-center p-4">
-                    <span class="text-on-surface-variant text-label-md">无需转账</span>
-                  </div>
-                </template>
-                
-                <div v-else class="flex-grow flex flex-col items-center justify-center text-center p-6 text-on-surface-variant opacity-70">
-                  <span class="material-symbols-outlined text-4xl mb-2">account_balance</span>
-                  <p class="font-label-lg">暂无结算数据</p>
-                  <p class="text-label-sm mt-1">添加成员并记录消费后即可看到结算建议</p>
-                </div>
-              </div>
-            </div>
+            <SettlementCard
+              :settlement="settlement"
+              :members="members"
+            />
           </div>
         </div>
       </main>
