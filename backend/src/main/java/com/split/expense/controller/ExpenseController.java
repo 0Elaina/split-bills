@@ -1,6 +1,5 @@
 package com.split.expense.controller;
 
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +14,7 @@ import com.split.expense.dto.ExpenseSaveDTO;
 import com.split.expense.service.ExpenseService;
 import com.split.expense.vo.ExpenseListItemVO;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -51,7 +51,7 @@ public class ExpenseController {
     @PostMapping
     public Result<Void> createExpense(
         @PathVariable Long ledgerId,
-        @Validated @RequestBody  ExpenseSaveDTO dto
+        @Valid @RequestBody  ExpenseSaveDTO dto
     ) {
         expenseService.createExpense(ledgerId, dto);
         return Result.success();
