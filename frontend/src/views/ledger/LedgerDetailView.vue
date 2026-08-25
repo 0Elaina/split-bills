@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getLedger, updateLedger, deleteLedger, type LedgerItem } from '@/shared/api/ledger'
 import { getMembers, createMember, updateMember, deleteMember, type MemberVO, type MemberSaveDTO } from '@/shared/api/member'
+import { getExpenses, type ExpenseListItemVO } from '@/shared/api/expense'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +18,13 @@ const memberDialog = ref(false)
 const memberSubmitting = ref(false)
 const memberFormData = ref<MemberSaveDTO>({ name: '' })
 
+// 消费状态
+const expenses = ref<ExpenseListItemVO[]>([])
+
+const totalExpenseAmount = computed(() => {
+  return expenses.value.reduce((sum, item) => sum + parseFloat(item.amount), 0).toFixed(2)
+})
+
 // 颜色映射池 (应对设计原型的甲乙丙颜色分配)
 const colorClasses = [
   'bg-primary text-on-primary',
@@ -26,6 +34,12 @@ const colorClasses = [
 
 const getMemberColorClass = (index: number) => {
   return colorClasses[index % colorClasses.length]
+}
+
+// 辅助方法：通过 memberId 获取对应颜色，保持同一成员颜色一致
+const getMemberColorById = (id: string) => {
+  const index = members.value.findIndex(m => String(m.id) === String(id))
+  return getMemberColorClass(index >= 0 ? index : 0)
 }
 
 // 修改名称弹窗状态
@@ -41,12 +55,14 @@ const deleting = ref(false)
 const fetchDetail = async () => {
   try {
     loading.value = true
-    const [ledgerData, membersData] = await Promise.all([
+    const [ledgerData, membersData, expensesData] = await Promise.all([
       getLedger(ledgerId),
-      getMembers(ledgerId)
+      getMembers(ledgerId),
+      getExpenses(ledgerId, 1, 100) // 暂取前100条
     ])
     ledger.value = ledgerData
     members.value = membersData
+    expenses.value = expensesData.records || []
   } catch (error) {
     // 异常由全局拦截器处理
     router.replace('/') // 找不到则退回首页
@@ -224,7 +240,7 @@ onMounted(() => {
               class="bg-surface-container-high text-on-surface font-label-sm text-label-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-outline-variant"
             >
               <span class="material-symbols-outlined text-[16px]">account_balance_wallet</span>
-              总支出 ¥0.00
+              总支出 ¥{{ totalExpenseAmount }}
             </div>
             <div
               class="bg-surface-container-high text-on-surface font-label-sm text-label-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-outline-variant"
@@ -236,7 +252,7 @@ onMounted(() => {
               class="bg-surface-container-high text-on-surface font-label-sm text-label-sm px-3 py-1.5 rounded-full flex items-center gap-1.5 border border-outline-variant"
             >
               <span class="material-symbols-outlined text-[16px]">receipt_long</span>
-              0 笔消费
+              {{ expenses.length }} 笔消费
             </div>
           </div>
         </div>
@@ -248,10 +264,48 @@ onMounted(() => {
           <!-- Left Column (8): Expense List -->
           <div class="col-span-12 lg:col-span-8 flex flex-col gap-md">
             <h2 class="font-headline-md text-headline-md text-on-surface mb-xs">消费明细</h2>
-            <div
-              class="bg-white border border-[#E5E2D9] shadow-sm rounded-xl p-sm flex flex-col min-h-[200px] items-center justify-center text-on-surface-variant"
+            
+            <div v-if="expenses.length === 0"
+              class="surface-card rounded-xl p-sm flex flex-col min-h-[200px] items-center justify-center text-on-surface-variant"
             >
-              工作台占位区域：暂无消费明细，后续在此添加
+              暂无消费明细，点击“记一笔”开始记录
+            </div>
+
+            <div v-else class="surface-card rounded-xl p-sm flex flex-col">
+              <div
+                v-for="expense in expenses"
+                :key="expense.id"
+                class="expense-divider p-sm flex items-center justify-between hover:bg-surface-container-low transition-colors rounded-lg cursor-pointer"
+              >
+                <div class="flex items-center gap-md">
+                  <div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
+                    <span class="material-symbols-outlined">receipt_long</span>
+                  </div>
+                  <div class="flex flex-col">
+                    <span class="font-body-lg text-body-lg text-on-surface font-medium">{{ expense.title }}</span>
+                    <div class="flex items-center gap-2 mt-1">
+                      <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px]">calendar_today</span> {{ expense.expenseDate }}
+                      </span>
+                      <span class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[14px]">person</span> {{ expense.payer?.name }} 支付
+                      </span>
+                    </div>
+                    <div class="flex items-center flex-wrap gap-1 mt-2">
+                      <span
+                        v-for="participant in expense.participants"
+                        :key="participant.id"
+                        class="bg-surface-container-highest text-on-surface-variant text-[10px] px-2 py-0.5 rounded"
+                      >
+                        {{ participant.name }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span class="font-headline-md text-headline-md text-on-surface">¥{{ expense.amount }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -475,3 +529,18 @@ onMounted(() => {
     </v-dialog>
   </div>
 </template>
+
+<style scoped>
+.surface-card {
+  background-color: #FFFDF8; /* Level 1 Card */
+  border: 1px solid #E5E2D9;
+  box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease-in-out;
+}
+.surface-card:hover {
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.08); /* Level 2 Hover */
+}
+.expense-divider:not(:last-child) {
+  border-bottom: 1px solid #E5E2D9;
+}
+</style>
