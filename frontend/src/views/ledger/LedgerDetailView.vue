@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getLedger, updateLedger, deleteLedger, type LedgerItem } from '@/shared/api/ledger'
 import { getMembers, createMember, updateMember, deleteMember, type MemberVO, type MemberSaveDTO } from '@/shared/api/member'
-import { getExpenses, createExpense, type ExpenseListItemVO, type ExpenseSaveDTO } from '@/shared/api/expense'
+import { getExpenses, createExpense, updateExpense, deleteExpense, type ExpenseListItemVO, type ExpenseSaveDTO } from '@/shared/api/expense'
 
 const route = useRoute()
 const router = useRouter()
@@ -113,8 +113,11 @@ const refreshExpenses = async () => {
   expenses.value = expensesData.records || []
 }
 
-// 打开记一笔弹窗
+const expenseEditingId = ref<string>('')
+
+// 打开记一笔弹窗 (新增)
 const openExpenseDialog = () => {
+  expenseEditingId.value = ''
   expenseFormData.value = {
     title: '',
     amount: '',
@@ -125,7 +128,27 @@ const openExpenseDialog = () => {
   expenseDialog.value = true
 }
 
-// 提交记一笔
+// 打开记一笔弹窗 (编辑)
+const editExpense = (item: ExpenseListItemVO) => {
+  expenseEditingId.value = item.id
+  expenseFormData.value = {
+    title: item.title,
+    amount: item.amount,
+    expenseDate: item.expenseDate.substring(0, 10),
+    payerMemberId: item.payer.id,
+    participantMemberIds: item.participants.map(p => p.id)
+  }
+  expenseDialog.value = true
+}
+
+// 删除消费
+const confirmDeleteExpense = async (id: string) => {
+  if (!confirm('确定要删除这笔消费吗？')) return
+  await deleteExpense(ledgerId, id)
+  await refreshExpenses()
+}
+
+// 提交记一笔 (新增/修改)
 const onSubmitExpense = async () => {
   // 检查原生的 participantMemberIds 是否为空
   if (expenseFormData.value.participantMemberIds.length === 0) {
@@ -134,7 +157,11 @@ const onSubmitExpense = async () => {
   
   try {
     expenseSubmitting.value = true
-    await createExpense(ledgerId, expenseFormData.value)
+    if (expenseEditingId.value) {
+      await updateExpense(ledgerId, expenseEditingId.value, expenseFormData.value)
+    } else {
+      await createExpense(ledgerId, expenseFormData.value)
+    }
     expenseDialog.value = false
     await refreshExpenses()
   } finally {
@@ -355,8 +382,29 @@ onMounted(() => {
                     </div>
                   </div>
                 </div>
-                <div class="text-right">
+                <div class="text-right flex items-center gap-sm">
                   <span class="font-headline-md text-headline-md text-on-surface">¥{{ expense.amount }}</span>
+                  <v-menu location="bottom end">
+                    <template v-slot:activator="{ props }">
+                      <button v-bind="props" class="p-2 rounded-full hover:bg-surface-variant text-on-surface-variant transition-colors flex items-center justify-center" @click.stop>
+                        <span class="material-symbols-outlined">more_vert</span>
+                      </button>
+                    </template>
+                    <v-list class="bg-surface border border-outline-variant shadow-sm rounded-lg">
+                      <v-list-item @click="editExpense(expense)" class="hover:bg-surface-container-high transition-colors cursor-pointer">
+                        <template v-slot:prepend>
+                          <span class="material-symbols-outlined mr-2 text-[18px]">edit</span>
+                        </template>
+                        <v-list-item-title class="font-label-lg text-label-lg">编辑</v-list-item-title>
+                      </v-list-item>
+                      <v-list-item @click="confirmDeleteExpense(expense.id)" class="hover:bg-error-container text-error transition-colors cursor-pointer">
+                        <template v-slot:prepend>
+                          <span class="material-symbols-outlined mr-2 text-[18px]">delete</span>
+                        </template>
+                        <v-list-item-title class="font-label-lg text-label-lg">删除</v-list-item-title>
+                      </v-list-item>
+                    </v-list>
+                  </v-menu>
                 </div>
               </div>
             </div>
@@ -586,7 +634,7 @@ onMounted(() => {
         <div class="bg-surface rounded-xl shadow-[0px_8px_24px_rgba(0,0,0,0.12)] flex flex-col border border-surface-variant overflow-hidden">
           <!-- Header -->
           <div class="px-md py-md border-b border-outline-variant flex items-center justify-between bg-surface">
-            <h2 class="font-headline-md text-headline-md text-on-surface">记一笔消费</h2>
+            <h2 class="font-headline-md text-headline-md text-on-surface">{{ expenseEditingId ? '修改消费' : '记一笔消费' }}</h2>
             <button type="button" @click="expenseDialog = false" class="text-on-surface-variant hover:text-on-surface transition-colors p-xs rounded-full hover:bg-surface-container-high focus:outline-none">
               <span class="material-symbols-outlined">close</span>
             </button>
@@ -670,7 +718,7 @@ onMounted(() => {
             </button>
             <button type="submit" :disabled="expenseSubmitting" class="px-md py-sm font-label-lg text-label-lg bg-primary-container text-on-primary rounded-lg hover:bg-surface-tint transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-1 focus:ring-offset-surface flex items-center gap-2">
               <v-progress-circular v-if="expenseSubmitting" indeterminate size="16" width="2"></v-progress-circular>
-              保存消费
+              {{ expenseEditingId ? '保存修改' : '保存消费' }}
             </button>
           </div>
         </div>

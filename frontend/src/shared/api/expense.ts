@@ -45,3 +45,19 @@ export async function createExpense(ledgerId: string, data: ExpenseSaveDTO) {
   const response = await http.post<ApiResult<void>>(`/ledgers/${ledgerId}/expenses`, data)
   return response.data.data
 }
+
+/**
+ * 修改记一笔
+ */
+export async function updateExpense(ledgerId: string, expenseId: string, data: ExpenseSaveDTO) {
+  const response = await http.put<ApiResult<void>>(`/ledgers/${ledgerId}/expenses/${expenseId}`, data)
+  return response.data.data
+}
+
+/**
+ * 删除记一笔
+ */
+export async function deleteExpense(ledgerId: string, expenseId: string) {
+  const response = await http.delete<ApiResult<void>>(`/ledgers/${ledgerId}/expenses/${expenseId}`)
+  return response.data.data
+}
