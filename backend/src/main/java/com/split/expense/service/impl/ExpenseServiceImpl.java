@@ -9,10 +9,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.split.expense.dto.ExpenseSaveDTO;
 import com.split.expense.entity.Expense;
 import com.split.expense.entity.ExpenseParticipant;
 import com.split.expense.mapper.ExpenseMapper;
@@ -61,10 +64,42 @@ public class ExpenseServiceImpl implements ExpenseService {
         List<ExpenseListItemVO> voList = expenses.stream()
                 .map(e -> convertToVO(e, allParticipants, memberVoMap))
                 .collect(Collectors.toList());
-        
+
         Page<ExpenseListItemVO> resultPage = new Page<>(current, size, expensePage.getTotal());
         resultPage.setRecords(voList);
         return resultPage;
+    }
+
+    /**
+     * 新增记一笔
+     * 
+     * @param ledgerId 账本 ID
+     * @param dto      请求参数
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void createExpense(Long ledgerId, ExpenseSaveDTO dto) {
+        // 将 String 类型的金额转换成 分（Long）
+        BigDecimal amountDecimal = new BigDecimal(dto.getAmount());
+        long amountCents = amountDecimal.multiply(BigDecimal.valueOf(100)).longValue();
+
+        // 组装并保存主表 Expense
+        Expense expense = new Expense();
+        BeanUtils.copyProperties(dto, expense);
+        expense.setLedgerId(ledgerId);
+        expense.setAmountCents(amountCents);
+        expenseMapper.insert(expense);
+
+        // 组装并批量保存关联表 ExpenseParticipant
+        List<ExpenseParticipant> participants = dto.getParticipantMemberIds().stream()
+                .map(memberId -> {
+                    ExpenseParticipant ep = new ExpenseParticipant();
+                    ep.setExpenseId(expense.getId());
+                    ep.setMemberId(memberId);
+                    return ep;
+                })
+                .collect(Collectors.toList());
+        participantMapper.insert(participants);
     }
 
     /**
