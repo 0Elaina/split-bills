@@ -1,48 +1,38 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getLedger, updateLedger, deleteLedger, type LedgerItem } from '@/shared/api/ledger'
-import { getMembers, createMember, updateMember, deleteMember, type MemberVO, type MemberSaveDTO } from '@/shared/api/member'
-import { getExpenses, createExpense, updateExpense, deleteExpense, type ExpenseListItemVO, type ExpenseSaveDTO } from '@/shared/api/expense'
+import { useLedger } from './composables/useLedger'
+import { useMembers } from './composables/useMembers'
+import { useExpenses } from './composables/useExpenses'
+
+import ExpenseFormDialog from './components/ExpenseFormDialog.vue'
+import MemberModals from './components/MemberModals.vue'
+import LedgerModals from './components/LedgerModals.vue'
 
 const route = useRoute()
 const router = useRouter()
 const ledgerId = route.params.id as string
 
-const ledger = ref<LedgerItem | null>(null)
-const loading = ref(true)
+const {
+  ledger, fetchLedger,
+  editDialog: ledgerEditDialog, editName: ledgerEditName, submitting: ledgerSubmitting,
+  openEditDialog: openLedgerEditDialog, onUpdateName: onLedgerUpdateName,
+  deleteDialog: ledgerDeleteDialog, deleting: ledgerDeleting, confirmDelete: confirmLedgerDelete
+} = useLedger(ledgerId)
 
-// 成员状态
-const members = ref<MemberVO[]>([])
-const memberDialog = ref(false)
-const memberSubmitting = ref(false)
-const memberFormData = ref<MemberSaveDTO>({ name: '' })
+const {
+  members, fetchMembers,
+  memberDialog, memberFormData, memberSubmitting, onSubmitMember,
+  editMemberDialog, memberEditing, memberEditName, memberEditSubmitting, openEditMember, onUpdateMember,
+  deleteMemberDialog, memberDeleting, memberDeleteSubmitting, openDeleteMember, confirmDeleteMember
+} = useMembers(ledgerId)
 
-// 消费状态
-const expenses = ref<ExpenseListItemVO[]>([])
-const expenseDialog = ref(false)
-const expenseSubmitting = ref(false)
-const expenseForm = ref<any>(null)
-const expenseFormData = ref<ExpenseSaveDTO>({
-  title: '',
-  amount: '',
-  expenseDate: new Date().toISOString().substring(0, 10), // 默认今天
-  payerMemberId: '',
-  participantMemberIds: []
-})
+const {
+  expenses, fetchExpenses, totalExpenseAmount,
+  expenseDialog, expenseEditing, openExpenseDialog, editExpense, confirmDeleteExpense, onExpenseSuccess
+} = useExpenses(ledgerId)
 
-// 表单金额正则验证规则
-const amountRules = [
-  (v: string) => !!v || '金额不能为空',
-  (v: string) => /^[1-9]\d*(\.\d{1,2})?$|^0\.\d{1,2}$/.test(v) || '金额格式不正确，必须大于 0 且最多两位小数'
-]
-
-
-const totalExpenseAmount = computed(() => {
-  return expenses.value.reduce((sum, item) => sum + parseFloat(item.amount), 0).toFixed(2)
-})
-
-// 颜色映射池 (应对设计原型的甲乙丙颜色分配)
+// 颜色映射池
 const colorClasses = [
   'bg-primary text-on-primary',
   'bg-secondary text-on-secondary',
@@ -53,198 +43,19 @@ const getMemberColorClass = (index: number) => {
   return colorClasses[index % colorClasses.length]
 }
 
-// 辅助方法：通过 memberId 获取对应颜色，保持同一成员颜色一致
-const getMemberColorById = (id: string) => {
-  const index = members.value.findIndex(m => String(m.id) === String(id))
-  return getMemberColorClass(index >= 0 ? index : 0)
-}
-
-// 修改名称弹窗状态
-const editDialog = ref(false)
-const editName = ref('')
-const submitting = ref(false)
-
-// 删除确认弹窗状态
-const deleteDialog = ref(false)
-const deleting = ref(false)
+const loading = ref(true)
 
 // 初始化获取数据
 const fetchDetail = async () => {
   try {
     loading.value = true
-    const [ledgerData, membersData, expensesData] = await Promise.all([
-      getLedger(ledgerId),
-      getMembers(ledgerId),
-      getExpenses(ledgerId, 1, 100) // 暂取前100条
+    await Promise.all([
+      fetchLedger(),
+      fetchMembers(),
+      fetchExpenses()
     ])
-    ledger.value = ledgerData
-    members.value = membersData
-    expenses.value = expensesData.records || []
-  } catch (error) {
-    // 异常由全局拦截器处理
-    router.replace('/') // 找不到则退回首页
   } finally {
     loading.value = false
-  }
-}
-
-// 刷新成员
-const refreshMembers = async () => {
-  members.value = await getMembers(ledgerId)
-}
-
-// 提交新增成员
-const onSubmitMember = async () => {
-  if (!memberFormData.value.name.trim()) return
-  try {
-    memberSubmitting.value = true
-    await createMember(ledgerId, memberFormData.value)
-    memberDialog.value = false
-    memberFormData.value.name = ''
-    await refreshMembers()
-  } finally {
-    memberSubmitting.value = false
-  }
-}
-
-// 刷新消费列表
-const refreshExpenses = async () => {
-  const expensesData = await getExpenses(ledgerId, 1, 100)
-  expenses.value = expensesData.records || []
-}
-
-const expenseEditingId = ref<string>('')
-
-// 打开记一笔弹窗 (新增)
-const openExpenseDialog = () => {
-  expenseEditingId.value = ''
-  expenseFormData.value = {
-    title: '',
-    amount: '',
-    expenseDate: new Date().toISOString().substring(0, 10),
-    payerMemberId: '',
-    participantMemberIds: []
-  }
-  expenseDialog.value = true
-}
-
-// 打开记一笔弹窗 (编辑)
-const editExpense = (item: ExpenseListItemVO) => {
-  expenseEditingId.value = item.id
-  expenseFormData.value = {
-    title: item.title,
-    amount: item.amount,
-    expenseDate: item.expenseDate.substring(0, 10),
-    payerMemberId: item.payer.id,
-    participantMemberIds: item.participants.map(p => p.id)
-  }
-  expenseDialog.value = true
-}
-
-// 删除消费
-const confirmDeleteExpense = async (id: string) => {
-  if (!confirm('确定要删除这笔消费吗？')) return
-  await deleteExpense(ledgerId, id)
-  await refreshExpenses()
-}
-
-// 提交记一笔 (新增/修改)
-const onSubmitExpense = async () => {
-  // 检查原生的 participantMemberIds 是否为空
-  if (expenseFormData.value.participantMemberIds.length === 0) {
-    return
-  }
-  
-  try {
-    expenseSubmitting.value = true
-    if (expenseEditingId.value) {
-      await updateExpense(ledgerId, expenseEditingId.value, expenseFormData.value)
-    } else {
-      await createExpense(ledgerId, expenseFormData.value)
-    }
-    expenseDialog.value = false
-    await refreshExpenses()
-  } finally {
-    expenseSubmitting.value = false
-  }
-}
-
-// 修改成员状态与逻辑
-const editMemberDialog = ref(false)
-const memberEditing = ref<MemberVO | null>(null)
-const memberEditName = ref('')
-const memberEditSubmitting = ref(false)
-
-const openEditMember = (member: MemberVO) => {
-  memberEditing.value = member
-  memberEditName.value = member.name
-  editMemberDialog.value = true
-}
-
-const onUpdateMember = async () => {
-  if (!memberEditName.value.trim() || !memberEditing.value) return
-  try {
-    memberEditSubmitting.value = true
-    await updateMember(ledgerId, memberEditing.value.id, { name: memberEditName.value })
-    editMemberDialog.value = false
-    await refreshMembers()
-  } finally {
-    memberEditSubmitting.value = false
-  }
-}
-
-// 删除成员状态与逻辑
-const deleteMemberDialog = ref(false)
-const memberDeleting = ref<MemberVO | null>(null)
-const memberDeleteSubmitting = ref(false)
-
-const openDeleteMember = (member: MemberVO) => {
-  memberDeleting.value = member
-  deleteMemberDialog.value = true
-}
-
-const confirmDeleteMember = async () => {
-  if (!memberDeleting.value) return
-  try {
-    memberDeleteSubmitting.value = true
-    await deleteMember(ledgerId, memberDeleting.value.id)
-    deleteMemberDialog.value = false
-    await refreshMembers()
-  } finally {
-    memberDeleteSubmitting.value = false
-  }
-}
-
-// 提交修改名称
-const onUpdateName = async () => {
-  if (!editName.value.trim()) return
-  try {
-    submitting.value = true
-    const updated = await updateLedger(ledgerId, { name: editName.value })
-    ledger.value = updated
-    editDialog.value = false
-  } finally {
-    submitting.value = false
-  }
-}
-
-// 触发修改弹窗
-const openEditDialog = () => {
-  if (ledger.value) {
-    editName.value = ledger.value.name
-    editDialog.value = true
-  }
-}
-
-// 确认删除
-const confirmDelete = async () => {
-  try {
-    deleting.value = true
-    await deleteLedger(ledgerId)
-    deleteDialog.value = false
-    router.replace('/') // 删除成功，返回列表
-  } finally {
-    deleting.value = false
   }
 }
 
@@ -292,14 +103,14 @@ onMounted(() => {
                 <v-list>
                   <v-list-item
                     prepend-icon="mdi-pencil"
-                    title="修改名称"
-                    @click="openEditDialog"
+                    title="修改账本名称"
+                    @click="openLedgerEditDialog"
                   ></v-list-item>
                   <v-list-item
                     prepend-icon="mdi-delete"
                     title="删除账本"
                     class="text-error"
-                    @click="deleteDialog = true"
+                    @click="ledgerDeleteDialog = true"
                   ></v-list-item>
                 </v-list>
               </v-menu>
@@ -507,223 +318,43 @@ onMounted(() => {
       </div>
     </footer>
 
-    <!-- 修改名称弹窗 -->
-    <v-dialog v-model="editDialog" max-width="500">
-      <v-card>
-        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold">修改账本名称</v-card-title>
-        <v-card-text class="px-6 pb-2">
-          <v-form @submit.prevent="onUpdateName">
-            <v-text-field
-              v-model="editName"
-              label="账本名称"
-              variant="outlined"
-              color="primary"
-              :rules="[(v) => !!v || '不能为空', (v) => v.length <= 50 || '不能超过50个字符']"
-              autofocus
-            ></v-text-field>
-          </v-form>
-        </v-card-text>
-        <v-card-actions class="px-6 pb-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="editDialog = false">取消</v-btn>
-          <v-btn color="primary" variant="flat" :loading="submitting" @click="onUpdateName"
-            >保存</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- 成员管理弹窗组件 -->
+    <MemberModals
+      v-model:add-dialog="memberDialog"
+      v-model:add-form-data="memberFormData"
+      :add-submitting="memberSubmitting"
+      @submit-add="onSubmitMember"
 
-    <!-- 删除确认弹窗 -->
-    <v-dialog v-model="deleteDialog" max-width="400">
-      <v-card>
-        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold text-error">
-          <v-icon color="error" class="mr-2">mdi-alert</v-icon>删除账本
-        </v-card-title>
-        <v-card-text class="px-6 py-4 text-body-1">
-          确定要删除账本 <strong>{{ ledger?.name }}</strong> 吗？<br />
-          <span class="text-caption text-grey"
-            >注意：该操作不可恢复，删除后所有关联账单将一并清空。</span
-          >
-        </v-card-text>
-        <v-card-actions class="px-6 pb-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">取消</v-btn>
-          <v-btn color="error" variant="flat" :loading="deleting" @click="confirmDelete"
-            >确认删除</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+      v-model:edit-dialog="editMemberDialog"
+      v-model:edit-name="memberEditName"
+      :edit-submitting="memberEditSubmitting"
+      @submit-edit="onUpdateMember"
 
-    <!-- 添加成员弹窗 -->
-    <v-dialog v-model="memberDialog" max-width="500">
-      <v-card>
-        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold">添加成员</v-card-title>
-        <v-card-text class="px-6 pb-2">
-          <v-form @submit.prevent="onSubmitMember">
-            <v-text-field
-              v-model="memberFormData.name"
-              label="成员昵称"
-              variant="outlined"
-              color="primary"
-              :rules="[(v) => !!v || '不能为空', (v) => v.length <= 10 || '不能超过10个字符']"
-              autofocus
-            ></v-text-field>
-          </v-form>
-        </v-card-text>
-        <v-card-actions class="px-6 pb-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="memberDialog = false">取消</v-btn>
-          <v-btn color="primary" variant="flat" :loading="memberSubmitting" @click="onSubmitMember"
-            >确定</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+      v-model:delete-dialog="deleteMemberDialog"
+      :deleting-member="memberDeleting"
+      :delete-submitting="memberDeleteSubmitting"
+      @submit-delete="confirmDeleteMember"
+    />
 
-    <!-- 修改成员弹窗 -->
-    <v-dialog v-model="editMemberDialog" max-width="500">
-      <v-card>
-        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold">修改成员名称</v-card-title>
-        <v-card-text class="px-6 pb-2">
-          <v-form @submit.prevent="onUpdateMember">
-            <v-text-field
-              v-model="memberEditName"
-              label="成员昵称"
-              variant="outlined"
-              color="primary"
-              :rules="[(v) => !!v || '不能为空', (v) => v.length <= 10 || '不能超过10个字符']"
-              autofocus
-            ></v-text-field>
-          </v-form>
-        </v-card-text>
-        <v-card-actions class="px-6 pb-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="editMemberDialog = false">取消</v-btn>
-          <v-btn color="primary" variant="flat" :loading="memberEditSubmitting" @click="onUpdateMember"
-            >保存</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <!-- 账本管理弹窗组件 -->
+    <LedgerModals
+      v-model:edit-dialog="ledgerEditDialog"
+      v-model:edit-name="ledgerEditName"
+      :edit-submitting="ledgerSubmitting"
+      @submit-edit="onLedgerUpdateName"
 
-    <!-- 删除成员确认弹窗 -->
-    <v-dialog v-model="deleteMemberDialog" max-width="400">
-      <v-card>
-        <v-card-title class="pt-4 px-6 text-h6 font-weight-bold text-error">
-          <v-icon color="error" class="mr-2">mdi-alert</v-icon>删除成员
-        </v-card-title>
-        <v-card-text class="px-6 py-4 text-body-1">
-          确定要删除成员 <strong>{{ memberDeleting?.name }}</strong> 吗？<br />
-          <span class="text-caption text-grey"
-            >注意：如果该成员已参与任何账单，将无法被删除。</span
-          >
-        </v-card-text>
-        <v-card-actions class="px-6 pb-4">
-          <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteMemberDialog = false">取消</v-btn>
-          <v-btn color="error" variant="flat" :loading="memberDeleteSubmitting" @click="confirmDeleteMember"
-            >确认删除</v-btn
-          >
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-    <!-- 记一笔消费弹窗 -->
-    <v-dialog v-model="expenseDialog" max-width="640" transition="dialog-bottom-transition">
-      <form @submit.prevent="onSubmitExpense">
-        <div class="bg-surface rounded-xl shadow-[0px_8px_24px_rgba(0,0,0,0.12)] flex flex-col border border-surface-variant overflow-hidden">
-          <!-- Header -->
-          <div class="px-md py-md border-b border-outline-variant flex items-center justify-between bg-surface">
-            <h2 class="font-headline-md text-headline-md text-on-surface">{{ expenseEditingId ? '修改消费' : '记一笔消费' }}</h2>
-            <button type="button" @click="expenseDialog = false" class="text-on-surface-variant hover:text-on-surface transition-colors p-xs rounded-full hover:bg-surface-container-high focus:outline-none">
-              <span class="material-symbols-outlined">close</span>
-            </button>
-          </div>
-          <!-- Body -->
-          <div class="p-md flex flex-col gap-md overflow-y-auto max-h-[70vh]">
-            <!-- 消费名称 -->
-            <div class="flex flex-col gap-xs">
-              <label class="font-label-lg text-label-lg text-on-surface">消费名称</label>
-              <input v-model="expenseFormData.title" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-sm text-on-surface font-body-md text-body-md focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors" placeholder="输入消费名称" type="text" required />
-            </div>
-            <!-- 金额 & 日期 Row -->
-            <div class="grid grid-cols-2 gap-md">
-              <!-- 金额 -->
-              <div class="flex flex-col gap-xs">
-                <label class="font-label-lg text-label-lg text-on-surface">金额</label>
-                <div class="relative flex items-center">
-                  <span class="absolute left-sm text-on-surface-variant font-body-md text-body-md">¥</span>
-                  <input v-model="expenseFormData.amount" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg pl-[32px] pr-sm py-sm text-on-surface font-body-md text-body-md focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors" placeholder="0.00" type="text" required pattern="^[1-9]\d*(\.\d{1,2})?$|^0\.\d{1,2}$" title="金额格式不正确，必须大于 0 且最多两位小数" />
-                </div>
-              </div>
-              <!-- 消费日期 -->
-              <div class="flex flex-col gap-xs">
-                <label class="font-label-lg text-label-lg text-on-surface">消费日期</label>
-                <div class="relative flex items-center">
-                  <input v-model="expenseFormData.expenseDate" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-sm text-on-surface font-body-md text-body-md focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors" type="date" required />
-                </div>
-              </div>
-            </div>
-            <!-- 付款人 -->
-            <div class="flex flex-col gap-xs mt-base">
-              <label class="font-label-lg text-label-lg text-on-surface">付款人</label>
-              <div class="relative">
-                <select v-model="expenseFormData.payerMemberId" class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-sm text-on-surface font-body-md text-body-md appearance-none focus:border-primary-container focus:outline-none focus:ring-1 focus:ring-primary-container transition-colors pr-xl" required>
-                  <option value="" disabled>请选择付款人</option>
-                  <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-sm text-on-surface-variant">
-                  <span class="material-symbols-outlined">expand_more</span>
-                </div>
-              </div>
-            </div>
-            <!-- 参与人 -->
-            <div class="flex flex-col gap-xs mt-base">
-              <label class="font-label-lg text-label-lg text-on-surface">参与人</label>
-              <div class="flex flex-wrap gap-sm items-center">
-                <label v-for="m in members" :key="m.id" class="cursor-pointer">
-                  <input type="checkbox" :value="m.id" v-model="expenseFormData.participantMemberIds" class="hidden" />
-                  <div :class="[
-                    'flex items-center gap-xs rounded-full pl-xs pr-sm py-xs border transition-colors',
-                    expenseFormData.participantMemberIds.includes(m.id) 
-                      ? 'bg-primary-container text-on-primary border-primary-container hover:bg-surface-tint' 
-                      : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant hover:border-primary'
-                  ]">
-                    <div :class="[
-                      'w-6 h-6 rounded-full flex items-center justify-center font-label-sm text-label-sm font-bold',
-                      expenseFormData.participantMemberIds.includes(m.id)
-                        ? 'bg-surface-container-lowest text-primary'
-                        : 'bg-surface-variant text-on-surface-variant'
-                    ]">{{ m.name.charAt(0) }}</div>
-                    <span class="font-label-sm text-label-sm">{{ m.name }}</span>
-                    <span v-if="expenseFormData.participantMemberIds.includes(m.id)" class="material-symbols-outlined text-[16px]">close</span>
-                    <span v-else class="material-symbols-outlined text-[16px]">add</span>
-                  </div>
-                </label>
-              </div>
-            </div>
-            <!-- Note Text -->
-            <div class="mt-xs">
-              <p class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-xs">
-                <span class="material-symbols-outlined text-[16px]">info</span>
-                金额将由所选参与人平均分摊
-              </p>
-              <p v-if="expenseFormData.participantMemberIds.length === 0" class="text-error font-label-sm text-label-sm mt-1">请至少选择一位参与人</p>
-            </div>
-          </div>
-          <!-- Footer Actions -->
-          <div class="px-md py-md border-t border-outline-variant bg-surface flex justify-end gap-sm items-center">
-            <button type="button" @click="expenseDialog = false" class="px-md py-sm font-label-lg text-label-lg text-primary hover:bg-surface-container-highest rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-container">
-              取消
-            </button>
-            <button type="submit" :disabled="expenseSubmitting" class="px-md py-sm font-label-lg text-label-lg bg-primary-container text-on-primary rounded-lg hover:bg-surface-tint transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-container focus:ring-offset-1 focus:ring-offset-surface flex items-center gap-2">
-              <v-progress-circular v-if="expenseSubmitting" indeterminate size="16" width="2"></v-progress-circular>
-              {{ expenseEditingId ? '保存修改' : '保存消费' }}
-            </button>
-          </div>
-        </div>
-      </form>
-    </v-dialog>
+      v-model:delete-dialog="ledgerDeleteDialog"
+      :delete-submitting="ledgerDeleting"
+      @submit-delete="confirmLedgerDelete"
+    />
+    <!-- 记一笔消费弹窗组件 -->
+    <ExpenseFormDialog
+      v-model="expenseDialog"
+      :ledger-id="ledgerId"
+      :members="members"
+      :editing-expense="expenseEditing"
+      @success="onExpenseSuccess"
+    />
   </div>
 </template>
 
